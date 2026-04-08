@@ -1,0 +1,580 @@
+import { useState, useEffect, useRef } from "react";
+
+const IND = "#1A2580";
+const CEL = "#00AEEF";
+
+const PUESTOS = [
+  { id: "gerente_planta", nombre: "Gerente de Planta", area: "Producción", requisitos: "5+ años manufactura, liderazgo de equipos, NOM-STPS" },
+  { id: "supervisor_produccion", nombre: "Supervisor de Producción", area: "Producción", requisitos: "3+ años producción, manejo de personal operativo" },
+  { id: "analista_rh", nombre: "Analista de RH", area: "Recursos Humanos", requisitos: "2+ años RH, conocimiento de nómina y LFT" },
+  { id: "operador_linea", nombre: "Operador de Línea", area: "Producción", requisitos: "1+ año manufactura, disponibilidad de turno" },
+  { id: "vendedor_ruta", nombre: "Vendedor de Ruta", area: "Ventas", requisitos: "2+ años ventas, licencia de conducir vigente" },
+  { id: "auxiliar_contable", nombre: "Auxiliar Contable", area: "Administración", requisitos: "Carrera en contabilidad, manejo de Excel" },
+];
+
+function scoreColor(s) { return s >= 75 ? "#22c55e" : s >= 55 ? "#f59e0b" : "#ef4444"; }
+function scoreLabel(s) { return s >= 75 ? "Alto potencial ✓" : s >= 55 ? "A evaluar" : "No califica"; }
+function formatDate(iso) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+async function callClaude(systemPrompt, userPrompt, maxTokens = 400) {
+  const body = {
+    model: "claude-sonnet-4-20250514",
+    max_tokens: maxTokens,
+    messages: [{ role: "user", content: userPrompt }],
+  };
+  if (systemPrompt) body.system = systemPrompt;
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) throw new Error("API error " + res.status);
+  const data = await res.json();
+  if (!data.content || !data.content[0]) throw new Error("Respuesta vacía de la API");
+  return data.content[0].text;
+}
+
+function exportCSV(lista) {
+  const headers = ["Nombre","Email","Teléfono","Puesto","Experiencia","Disponibilidad","Pretensión","Score","Estatus","Fecha"];
+  const rows = lista.map(c => [
+    c.nombre, c.email, c.telefono, c.puesto_nombre,
+    c.anos_experiencia, c.disponibilidad, c.pretension,
+    c.score + "/100", c.estatus, formatDate(c.fecha)
+  ]);
+  const csv = [headers, ...rows]
+    .map(r => r.map(v => '"' + String(v || "").replace(/"/g, '""') + '"').join(","))
+    .join("\n");
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "candidatos_hm.csv";
+  a.click();
+}
+
+async function getCandidatos() {
+  try {
+    const d = await window.storage.get("hm_candidatos");
+    return d ? JSON.parse(d.value) : [];
+  } catch { return []; }
+}
+
+async function saveCandidatos(lista) {
+  try { await window.storage.set("hm_candidatos", JSON.stringify(lista)); }
+  catch (e) { console.warn("storage error:", e); }
+}
+
+const SYSTEM_BOT = `Eres el asistente de reclutamiento de HM Talento Estratégico, consultora de RH en Tehuacán, Puebla. Tono profesional, amigable y conciso. Siempre en español. Máximo 2-3 oraciones por respuesta. Haz solo UNA pregunta a la vez.`;
+
+// ── APP ───────────────────────────────────────────────────────────
+export default function App() {
+  const [vista, setVista] = useState("home");
+  const [puesto, setPuesto] = useState(null);
+  const [loginPass, setLoginPass] = useState("");
+  const [loginError, setLoginError] = useState("");
+
+  const irCandidato = (p) => { setPuesto(p); setVista("chat"); };
+
+  const intentarLogin = () => {
+    if (loginPass === "HMtalento2024") { setLoginError(""); setVista("panel"); }
+    else setLoginError("Contraseña incorrecta.");
+  };
+
+  return (
+    <div style={{ fontFamily: "'DM Sans','Segoe UI',sans-serif", minHeight: "100vh", background: "#f4f6fb" }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Serif+Display:ital@0;1&display=swap');
+        *{box-sizing:border-box;margin:0;padding:0}
+        button{cursor:pointer;font-family:inherit}
+        input,select{font-family:inherit}
+        .bpri{background:${IND};color:#fff;border:none;padding:11px 22px;border-radius:10px;font-size:14px;font-weight:600;transition:all .18s}
+        .bpri:hover{background:#121c70;transform:translateY(-1px)}
+        .bpri:disabled{opacity:.5;cursor:not-allowed;transform:none}
+        .bcel{background:${CEL};color:#fff;border:none;padding:9px 18px;border-radius:8px;font-size:13px;font-weight:600;transition:all .18s}
+        .bcel:hover{background:#009fd8}
+        .bghost{background:transparent;border:1.5px solid ${IND};color:${IND};padding:9px 18px;border-radius:8px;font-size:14px;font-weight:500;transition:all .18s}
+        .bghost:hover{background:${IND};color:#fff}
+        .card{background:#fff;border-radius:16px;border:1.5px solid #e4e8f0}
+        .pulse{animation:pulse 1.8s infinite}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+        .fadein{animation:fi .28s ease}
+        @keyframes fi{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+        .tag{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+        ::-webkit-scrollbar{width:5px}
+        ::-webkit-scrollbar-thumb{background:#ddd;border-radius:3px}
+      `}</style>
+
+      {vista === "home"   && <HomeView onCandidato={irCandidato} onLogin={() => { setLoginError(""); setVista("login"); }} />}
+      {vista === "login"  && <LoginView pass={loginPass} setPass={setLoginPass} onLogin={intentarLogin} error={loginError} onBack={() => setVista("home")} />}
+      {vista === "chat"   && <ChatView puesto={puesto} onBack={() => setVista("home")} />}
+      {vista === "panel"  && <PanelView onBack={() => setVista("home")} />}
+    </div>
+  );
+}
+
+// ── HOME ─────────────────────────────────────────────────────────
+function HomeView({ onCandidato, onLogin }) {
+  const areas = { "Producción": ["#dbeafe","#1e40af"], "Recursos Humanos": ["#fce7f3","#9d174d"], "Ventas": ["#dcfce7","#166534"], "Administración": ["#fef3c7","#92400e"] };
+  return (
+    <div>
+      <div style={{ background: IND, padding: "0 28px" }}>
+        <div style={{ maxWidth: 1080, margin: "0 auto", height: 62, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 9, color: "#fff" }}>
+            <div style={{ width: 9, height: 9, borderRadius: "50%", background: CEL }} />
+            <span style={{ fontFamily: "'DM Serif Display',serif", fontSize: 19 }}>HM Talento Estratégico</span>
+            <span style={{ background: "rgba(0,174,239,.18)", color: CEL, fontSize: 10, padding: "2px 8px", borderRadius: 20, fontWeight: 700 }}>BOLSA DE TRABAJO</span>
+          </div>
+          <button onClick={onLogin} style={{ background: "rgba(255,255,255,.1)", border: "1px solid rgba(255,255,255,.25)", color: "#fff", padding: "7px 15px", borderRadius: 8, fontSize: 13, fontWeight: 500 }}>
+            🔐 Panel reclutador
+          </button>
+        </div>
+      </div>
+
+      <div style={{ background: `linear-gradient(135deg,${IND} 0%,#0c175c 100%)`, color: "#fff", padding: "52px 28px 44px", textAlign: "center" }}>
+        <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 38, lineHeight: 1.2, marginBottom: 14 }}>
+          Tu próxima oportunidad<br /><em style={{ color: CEL }}>empieza aquí</em>
+        </div>
+        <p style={{ fontSize: 16, opacity: .78, maxWidth: 480, margin: "0 auto", lineHeight: 1.65 }}>
+          Postúlate en minutos. Nuestro asistente con IA evalúa tu perfil y te conecta con el equipo de reclutamiento.
+        </p>
+      </div>
+
+      <div style={{ maxWidth: 1080, margin: "0 auto", padding: "44px 28px" }}>
+        <h2 style={{ fontSize: 24, fontWeight: 700, color: "#111", marginBottom: 6 }}>Vacantes disponibles</h2>
+        <p style={{ color: "#777", fontSize: 14, marginBottom: 24 }}>{PUESTOS.length} posiciones abiertas · Tehuacán, Puebla y región</p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 18 }}>
+          {PUESTOS.map(p => {
+            const [bg, fg] = areas[p.area] || ["#f3f4f6", "#374151"];
+            return (
+              <div key={p.id} className="card" style={{ padding: 22, cursor: "pointer", transition: "all .2s" }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = CEL; e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 6px 24px rgba(0,174,239,.14)"; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = "#e4e8f0"; e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "none"; }}
+                onClick={() => onCandidato(p)}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+                  <span className="tag" style={{ background: bg, color: fg }}>{p.area}</span>
+                  <span style={{ fontSize: 11, color: "#aaa" }}>📍 Tehuacán</span>
+                </div>
+                <h3 style={{ fontSize: 17, fontWeight: 700, color: "#111", marginBottom: 8, lineHeight: 1.3 }}>{p.nombre}</h3>
+                <p style={{ fontSize: 12, color: "#777", lineHeight: 1.55, marginBottom: 16 }}>{p.requisitos}</p>
+                <div style={{ textAlign: "right" }}>
+                  <button className="bcel" style={{ fontSize: 12, padding: "7px 14px" }}>Postularme →</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── LOGIN ─────────────────────────────────────────────────────────
+function LoginView({ pass, setPass, onLogin, error, onBack }) {
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div className="card" style={{ width: 340, padding: "36px 32px", boxShadow: "0 10px 40px rgba(0,0,0,.1)" }}>
+        <div style={{ textAlign: "center", marginBottom: 24 }}>
+          <div style={{ width: 52, height: 52, borderRadius: "50%", background: IND, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px", fontSize: 22 }}>🔐</div>
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: "#111" }}>Panel Reclutador</h2>
+          <p style={{ color: "#888", fontSize: 13, marginTop: 4 }}>HM Talento Estratégico</p>
+        </div>
+        <input value={pass} onChange={e => setPass(e.target.value)} type="password"
+          placeholder="Contraseña de acceso"
+          onKeyDown={e => e.key === "Enter" && onLogin()}
+          style={{ width: "100%", padding: "11px 14px", border: "1.5px solid #e5e7eb", borderRadius: 10, fontSize: 14, marginBottom: error ? 8 : 16, outline: "none" }} />
+        {error && <p style={{ color: "#ef4444", fontSize: 12, marginBottom: 14 }}>{error}</p>}
+        <button className="bpri" style={{ width: "100%", marginBottom: 10 }} onClick={onLogin}>Ingresar</button>
+        <button onClick={onBack} className="bghost" style={{ width: "100%", fontSize: 13 }}>← Volver</button>
+        <p style={{ textAlign: "center", fontSize: 11, color: "#ccc", marginTop: 14 }}>Demo: HMtalento2024</p>
+      </div>
+    </div>
+  );
+}
+
+// ── CHAT BOT ──────────────────────────────────────────────────────
+function ChatView({ puesto, onBack }) {
+  const [msgs, setMsgs] = useState([]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [etapa, setEtapa] = useState("nombre");
+  const [datos, setDatos] = useState({ puesto_id: puesto.id, puesto_nombre: puesto.nombre });
+  const [done, setDone] = useState(false);
+  const [scoreInfo, setScoreInfo] = useState(null);
+  const bottomRef = useRef(null);
+
+  useEffect(() => {
+    addBot(`¡Hola! 👋 Soy el asistente de selección de **HM Talento Estratégico**.\n\nQuiero conocerte para la posición de **${puesto.nombre}** (${puesto.area}).\n\nEl proceso toma solo 5 minutos. Comencemos: ¿cuál es tu **nombre completo**?`);
+  }, []);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [msgs, loading]);
+
+  const addBot = (t) => setMsgs(p => [...p, { tipo: "bot", texto: t }]);
+  const addUser = (t) => setMsgs(p => [...p, { tipo: "user", texto: t }]);
+
+  async function enviar() {
+    const val = input.trim();
+    if (!val || loading || done) return;
+    setInput("");
+    addUser(val);
+    setLoading(true);
+    try {
+      await procesar(val);
+    } catch (err) {
+      console.error(err);
+      addBot("⚠️ Ocurrió un problema al conectar. Por favor intenta de nuevo en unos segundos.");
+    }
+    setLoading(false);
+  }
+
+  async function procesar(val) {
+    const d = { ...datos };
+
+    if (etapa === "nombre") {
+      d.nombre = val; setDatos(d); setEtapa("email");
+      addBot(`Mucho gusto, **${val}**. 😊 ¿Cuál es tu **correo electrónico**?`);
+
+    } else if (etapa === "email") {
+      d.email = val; setDatos(d); setEtapa("telefono");
+      addBot("Perfecto. ¿Y tu número de **teléfono o WhatsApp**?");
+
+    } else if (etapa === "telefono") {
+      d.telefono = val; setDatos(d); setEtapa("experiencia");
+      addBot(`Gracias. ¿Cuántos **años de experiencia** tienes en el área de ${puesto.area}?`);
+
+    } else if (etapa === "experiencia") {
+      d.anos_experiencia = val; setDatos(d); setEtapa("logros");
+      const resp = await callClaude(SYSTEM_BOT,
+        `Candidato: ${d.nombre}, aplica a ${puesto.nombre}. Tiene ${val} años de experiencia en ${puesto.area}. Pídele en 2 oraciones que describa brevemente sus logros más relevantes relacionados con: ${puesto.requisitos}.`);
+      addBot(resp);
+
+    } else if (etapa === "logros") {
+      d.logros = val; setDatos(d); setEtapa("disponibilidad");
+      addBot("Muy bien. ¿Tienes **disponibilidad inmediata**? ¿Y en qué turno puedes trabajar?");
+
+    } else if (etapa === "disponibilidad") {
+      d.disponibilidad = val; setDatos(d); setEtapa("pretension");
+      addBot("Casi terminamos. ¿Cuál es tu **pretensión salarial mensual** (neto)?");
+
+    } else if (etapa === "pretension") {
+      d.pretension = val; setDatos(d); setEtapa("fin");
+
+      const evalPrompt = `Evalúa este candidato para ${puesto.nombre} en HM Talento Estratégico.
+
+CANDIDATO:
+- Nombre: ${d.nombre}
+- Experiencia: ${d.anos_experiencia} años
+- Logros: ${d.logros}
+- Disponibilidad: ${d.disponibilidad}
+- Pretensión salarial: ${d.pretension}
+
+REQUISITOS DEL PUESTO: ${puesto.requisitos}
+
+INSTRUCCIONES:
+1. Escribe un mensaje de cierre cálido y profesional (2-3 párrafos) agradeciendo al candidato. Dile que el equipo revisará su perfil en 2-3 días hábiles y que si califica lo contactarán por WhatsApp o correo.
+2. En la ÚLTIMA línea escribe exactamente esto: SCORE:XX
+   (donde XX es un número del 0 al 100 según qué tan bien cumple los requisitos)`;
+
+      const evalResp = await callClaude(SYSTEM_BOT, evalPrompt, 600);
+      const match = evalResp.match(/SCORE:(\d+)/);
+      const score = match ? Math.min(100, Math.max(0, parseInt(match[1]))) : 60;
+      const mensajeCierre = evalResp.replace(/SCORE:\d+/g, "").trim();
+
+      const candidato = {
+        ...d, score, id: Date.now().toString(),
+        fecha: new Date().toISOString(),
+        estatus: score >= 75 ? "Preseleccionado" : score >= 55 ? "En revisión" : "Descartado",
+      };
+      const lista = await getCandidatos();
+      lista.push(candidato);
+      await saveCandidatos(lista);
+
+      addBot(mensajeCierre);
+      setScoreInfo({ score, label: scoreLabel(score), color: scoreColor(score) });
+      setDone(true);
+    }
+  }
+
+  function renderTexto(txt) {
+    return txt.split(/(\*\*[^*]+\*\*)/).map((p, i) =>
+      p.startsWith("**") ? <strong key={i}>{p.replace(/\*\*/g, "")}</strong> : p
+    );
+  }
+
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: "#f4f6fb" }}>
+      <div style={{ background: IND, color: "#fff", padding: "0 20px", height: 60, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <button onClick={onBack} style={{ background: "none", border: "none", color: "#fff", fontSize: 18, opacity: .7 }}>←</button>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 15 }}>{puesto.nombre}</div>
+            <div style={{ fontSize: 11, opacity: .65 }}>{puesto.area} · Asistente IA</div>
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e" }} className="pulse" />
+          <span style={{ fontSize: 12, opacity: .75 }}>En línea</span>
+        </div>
+      </div>
+
+      <div style={{ flex: 1, overflowY: "auto", padding: "20px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+        {msgs.map((m, i) => (
+          <div key={i} className="fadein" style={{ display: "flex", justifyContent: m.tipo === "user" ? "flex-end" : "flex-start", alignItems: "flex-end", gap: 8 }}>
+            {m.tipo === "bot" && (
+              <div style={{ width: 30, height: 30, borderRadius: "50%", background: IND, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, flexShrink: 0 }}>🤖</div>
+            )}
+            <div style={{
+              maxWidth: "76%", padding: "11px 15px",
+              borderRadius: m.tipo === "user" ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
+              background: m.tipo === "user" ? IND : "#fff",
+              color: m.tipo === "user" ? "#fff" : "#1a1a2e",
+              fontSize: 14, lineHeight: 1.65,
+              boxShadow: "0 2px 8px rgba(0,0,0,.06)",
+              border: m.tipo === "bot" ? "1px solid #e4e8f0" : "none",
+              whiteSpace: "pre-wrap",
+            }}>
+              {renderTexto(m.texto)}
+            </div>
+          </div>
+        ))}
+
+        {loading && (
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
+            <div style={{ width: 30, height: 30, borderRadius: "50%", background: IND, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>🤖</div>
+            <div style={{ background: "#fff", border: "1px solid #e4e8f0", borderRadius: "18px 18px 18px 4px", padding: "14px 18px", display: "flex", gap: 5, alignItems: "center" }}>
+              {[0, 1, 2].map(i => (
+                <div key={i} className="pulse" style={{ width: 7, height: 7, borderRadius: "50%", background: CEL, animationDelay: `${i * 0.2}s` }} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {scoreInfo && (
+          <div className="fadein" style={{ background: "#fff", border: `2px solid ${scoreInfo.color}`, borderRadius: 14, padding: "16px 20px", textAlign: "center", margin: "8px 0" }}>
+            <div style={{ fontSize: 13, color: "#888", marginBottom: 6 }}>Tu compatibilidad con el puesto</div>
+            <div style={{ fontSize: 36, fontWeight: 800, color: scoreInfo.color }}>{scoreInfo.score}<span style={{ fontSize: 18 }}>/100</span></div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: scoreInfo.color, marginTop: 4 }}>{scoreInfo.label}</div>
+          </div>
+        )}
+        <div ref={bottomRef} />
+      </div>
+
+      <div style={{ background: "#fff", borderTop: "1px solid #e4e8f0", padding: "14px 16px", display: "flex", gap: 10, flexShrink: 0 }}>
+        {!done ? (
+          <>
+            <input value={input} onChange={e => setInput(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && !e.shiftKey && enviar()}
+              placeholder="Escribe tu respuesta..." disabled={loading}
+              style={{ flex: 1, padding: "11px 15px", border: "1.5px solid #e5e7eb", borderRadius: 12, fontSize: 14, outline: "none", background: loading ? "#f9f9f9" : "#fff" }} />
+            <button onClick={enviar} disabled={loading || !input.trim()} className="bpri" style={{ padding: "11px 18px" }}>→</button>
+          </>
+        ) : (
+          <button onClick={onBack} className="bghost" style={{ width: "100%" }}>← Volver a vacantes</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── PANEL RECLUTADOR ──────────────────────────────────────────────
+function PanelView({ onBack }) {
+  const [candidatos, setCandidatos] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [filtro, setFiltro] = useState("todos");
+  const [busqueda, setBusqueda] = useState("");
+  const [sel, setSel] = useState(null);
+
+  useEffect(() => { cargar(); }, []);
+
+  async function cargar() {
+    setCargando(true);
+    const lista = await getCandidatos();
+    setCandidatos(lista.sort((a, b) => b.score - a.score));
+    setCargando(false);
+  }
+
+  async function cambiarEstatus(id, estatus) {
+    const updated = candidatos.map(c => c.id === id ? { ...c, estatus } : c);
+    setCandidatos(updated);
+    setSel(prev => prev ? { ...prev, estatus } : null);
+    await saveCandidatos(updated);
+  }
+
+  async function eliminar(id) {
+    const updated = candidatos.filter(c => c.id !== id);
+    setCandidatos(updated);
+    setSel(null);
+    await saveCandidatos(updated);
+  }
+
+  const filtrados = candidatos.filter(c => {
+    const okFiltro = filtro === "todos" || c.estatus === filtro;
+    const q = busqueda.toLowerCase();
+    const okBusqueda = !busqueda || (c.nombre || "").toLowerCase().includes(q) || (c.puesto_nombre || "").toLowerCase().includes(q);
+    return okFiltro && okBusqueda;
+  });
+
+  const stats = {
+    total: candidatos.length,
+    pre: candidatos.filter(c => c.estatus === "Preseleccionado").length,
+    rev: candidatos.filter(c => c.estatus === "En revisión").length,
+    des: candidatos.filter(c => c.estatus === "Descartado").length,
+    prom: candidatos.length ? Math.round(candidatos.reduce((a, c) => a + (c.score || 0), 0) / candidatos.length) : 0,
+  };
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#f4f6fb" }}>
+      <div style={{ background: IND, color: "#fff", padding: "0 24px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <button onClick={onBack} style={{ background: "none", border: "none", color: "#fff", fontSize: 18, opacity: .7 }}>←</button>
+          <span style={{ fontFamily: "'DM Serif Display',serif", fontSize: 20 }}>Panel de Reclutamiento</span>
+        </div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={() => exportCSV(candidatos)} className="bcel" style={{ fontSize: 13 }}>⬇ Exportar Excel</button>
+          <button onClick={cargar} style={{ background: "rgba(255,255,255,.1)", border: "1px solid rgba(255,255,255,.3)", color: "#fff", padding: "8px 14px", borderRadius: 8, fontSize: 13 }}>↻</button>
+        </div>
+      </div>
+
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "24px" }}>
+        {/* Stats */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 14, marginBottom: 24 }}>
+          {[
+            { label: "Total", valor: stats.total, color: IND },
+            { label: "Preseleccionados", valor: stats.pre, color: "#22c55e" },
+            { label: "En revisión", valor: stats.rev, color: "#f59e0b" },
+            { label: "Descartados", valor: stats.des, color: "#ef4444" },
+            { label: "Score promedio", valor: stats.prom + "/100", color: CEL },
+          ].map((s, i) => (
+            <div key={i} className="card" style={{ padding: "16px 18px" }}>
+              <div style={{ fontSize: 26, fontWeight: 800, color: s.color }}>{s.valor}</div>
+              <div style={{ fontSize: 12, color: "#888", marginTop: 3 }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: sel ? "1fr 360px" : "1fr", gap: 20 }}>
+          {/* Lista */}
+          <div>
+            <div className="card" style={{ padding: "14px 18px", marginBottom: 14, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <input value={busqueda} onChange={e => setBusqueda(e.target.value)}
+                placeholder="🔍 Buscar por nombre o puesto..."
+                style={{ flex: 1, minWidth: 180, padding: "8px 12px", border: "1.5px solid #e5e7eb", borderRadius: 8, fontSize: 14, outline: "none" }} />
+              {["todos", "Preseleccionado", "En revisión", "Descartado"].map(f => (
+                <button key={f} onClick={() => setFiltro(f)}
+                  style={{ padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "none", background: filtro === f ? IND : "#f3f4f6", color: filtro === f ? "#fff" : "#555" }}>
+                  {f === "todos" ? "Todos" : f}
+                </button>
+              ))}
+            </div>
+
+            <div className="card" style={{ overflow: "hidden" }}>
+              {cargando ? (
+                <div style={{ padding: 40, textAlign: "center", color: "#888" }}>Cargando candidatos...</div>
+              ) : filtrados.length === 0 ? (
+                <div style={{ padding: 40, textAlign: "center", color: "#888" }}>
+                  {candidatos.length === 0
+                    ? "Aún no hay candidatos. Aparecerán aquí cuando alguien se postule desde el bot."
+                    : "Ningún candidato coincide con el filtro."}
+                </div>
+              ) : (
+                <>
+                  <div style={{ display: "grid", gridTemplateColumns: "2fr 1.5fr 80px 120px 90px", padding: "10px 18px", background: "#f8f9fb", borderBottom: "1px solid #e8eaf0", fontSize: 11, fontWeight: 700, color: "#999", textTransform: "uppercase", letterSpacing: .4 }}>
+                    <span>Candidato</span><span>Puesto</span><span>Score</span><span>Estatus</span><span>Fecha</span>
+                  </div>
+                  {filtrados.map(c => {
+                    const estatusColors = { "Preseleccionado": ["#dcfce7","#166534"], "En revisión": ["#fef3c7","#92400e"], "Descartado": ["#fee2e2","#991b1b"], "Contratado": ["#dbeafe","#1e40af"] };
+                    const [ebg, efg] = estatusColors[c.estatus] || ["#f3f4f6","#555"];
+                    return (
+                      <div key={c.id} onClick={() => setSel(c)}
+                        style={{ display: "grid", gridTemplateColumns: "2fr 1.5fr 80px 120px 90px", padding: "13px 18px", borderBottom: "1px solid #f0f0f5", cursor: "pointer", transition: "background .12s", background: sel?.id === c.id ? "#f0f5ff" : "transparent" }}
+                        onMouseEnter={e => { if (sel?.id !== c.id) e.currentTarget.style.background = "#fafafa"; }}
+                        onMouseLeave={e => { if (sel?.id !== c.id) e.currentTarget.style.background = "transparent"; }}>
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 14, color: "#111" }}>{c.nombre || "—"}</div>
+                          <div style={{ fontSize: 12, color: "#888" }}>{c.email}</div>
+                        </div>
+                        <div style={{ fontSize: 13, color: "#555", display: "flex", alignItems: "center" }}>{c.puesto_nombre}</div>
+                        <div style={{ display: "flex", alignItems: "center" }}>
+                          <div style={{ width: 38, height: 38, borderRadius: "50%", background: scoreColor(c.score) + "20", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, color: scoreColor(c.score) }}>{c.score}</div>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center" }}>
+                          <span className="tag" style={{ background: ebg, color: efg, fontSize: 11 }}>{c.estatus}</span>
+                        </div>
+                        <div style={{ fontSize: 12, color: "#999", display: "flex", alignItems: "center" }}>{formatDate(c.fecha)}</div>
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Detalle */}
+          {sel && (
+            <div className="card" style={{ height: "fit-content", overflow: "hidden" }}>
+              <div style={{ background: IND, padding: "20px 22px", color: "#fff" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div>
+                    <div style={{ fontSize: 17, fontWeight: 700 }}>{sel.nombre}</div>
+                    <div style={{ fontSize: 12, opacity: .7, marginTop: 2 }}>{sel.puesto_nombre}</div>
+                  </div>
+                  <button onClick={() => setSel(null)} style={{ background: "none", border: "none", color: "#fff", fontSize: 18, opacity: .6 }}>✕</button>
+                </div>
+                <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ width: 52, height: 52, borderRadius: "50%", background: scoreColor(sel.score), display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 800, color: "#fff" }}>{sel.score}</div>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>{scoreLabel(sel.score)}</div>
+                    <div style={{ fontSize: 11, opacity: .7 }}>Score de compatibilidad / 100</div>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ padding: "18px 22px" }}>
+                {[
+                  ["Email", sel.email],
+                  ["Teléfono", sel.telefono],
+                  ["Años de experiencia", sel.anos_experiencia],
+                  ["Disponibilidad", sel.disponibilidad],
+                  ["Pretensión salarial", sel.pretension],
+                ].map(([label, valor], i) => (
+                  <div key={i} style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#aaa", textTransform: "uppercase", letterSpacing: .5, marginBottom: 2 }}>{label}</div>
+                    <div style={{ fontSize: 14, color: "#111" }}>{valor || "—"}</div>
+                  </div>
+                ))}
+
+                {sel.logros && (
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#aaa", textTransform: "uppercase", letterSpacing: .5, marginBottom: 6 }}>Experiencia y logros</div>
+                    <div style={{ fontSize: 13, color: "#444", lineHeight: 1.6, background: "#f8f9fb", padding: "10px 12px", borderRadius: 8 }}>{sel.logros}</div>
+                  </div>
+                )}
+
+                <div style={{ borderTop: "1px solid #f0f0f5", paddingTop: 14, marginTop: 4 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#888", marginBottom: 8 }}>CAMBIAR ESTATUS</div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+                    {["Preseleccionado", "En revisión", "Descartado", "Contratado"].map(e => (
+                      <button key={e} onClick={() => cambiarEstatus(sel.id, e)}
+                        style={{ padding: "6px 11px", borderRadius: 8, fontSize: 11, fontWeight: 700, border: "none", background: sel.estatus === e ? IND : "#f3f4f6", color: sel.estatus === e ? "#fff" : "#555", transition: "all .15s" }}>
+                        {e}
+                      </button>
+                    ))}
+                  </div>
+                  <button onClick={() => eliminar(sel.id)}
+                    style={{ width: "100%", padding: "9px", borderRadius: 8, fontSize: 13, border: "1.5px solid #fee2e2", background: "transparent", color: "#ef4444", fontWeight: 600 }}>
+                    🗑 Eliminar candidato
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

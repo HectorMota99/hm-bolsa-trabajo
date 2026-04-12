@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HM Bolsa de Trabajo</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Segoe UI',sans-serif;background:#f4f6fb;min-height:100vh}
+    button{cursor:pointer;font-family:inherit}
+    input,select,textarea{font-family:inherit}
+    .bpri{background:#1A2580;color:#fff;border:none;padding:11px 22px;border-radius:10px;font-size:14px;font-weight:600;transition:all .18s;cursor:pointer}
+    .bpri:hover{background:#121c70}
+    .bpri:disabled{opacity:.5;cursor:not-allowed}
+    .bcel{background:#00AEEF;color:#fff;border:none;padding:9px 18px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer}
+    .bcel:hover{background:#009fd8}
+    .bghost{background:transparent;border:1.5px solid #1A2580;color:#1A2580;padding:9px 18px;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer}
+    .bghost:hover{background:#1A2580;color:#fff}
+    .card{background:#fff;border-radius:16px;border:1.5px solid #e4e8f0}
+    .tag{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+    .pulse{animation:pulse 1.8s infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+    .fadein{animation:fi .28s ease}
+    @keyframes fi{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+    ::-webkit-scrollbar{width:5px}
+    ::-webkit-scrollbar-thumb{background:#ddd;border-radius:3px}
+    .upload-zone{border:2px dashed #d1d5db;border-radius:12px;padding:24px;text-align:center;transition:all .2s;cursor:pointer}
+    .upload-zone:hover{border-color:#00AEEF;background:#f0faff}
+    .likert-btn{border:1.5px solid #e5e7eb;border-radius:10px;padding:10px 6px;background:#fff;cursor:pointer;transition:all .15s;font-size:12px;font-weight:600;color:#555;text-align:center;flex:1}
+    .likert-btn:hover{border-color:#1A2580;color:#1A2580}
+    .likert-sel{border-color:#1A2580!important;background:#1A2580!important;color:#fff!important}
+    #loading-screen{position:fixed;inset:0;background:#1A2580;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;z-index:9999}
+    #loading-screen p{color:#fff;font-size:16px;opacity:.8}
+    .spinner{width:40px;height:40px;border:3px solid rgba(255,255,255,.3);border-top-color:#00AEEF;border-radius:50%;animation:spin .8s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .psico-progress{height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden}
+    .psico-bar{height:100%;background:linear-gradient(90deg,#1A2580,#00AEEF);border-radius:3px;transition:width .4s ease}
+    .rasgo-card{border-radius:12px;padding:14px 16px;margin-bottom:10px}
+  </style>
+</head>
+<body>
+  <div id="loading-screen">
+    <div class="spinner"></div>
+    <p>Cargando HM Bolsa de Trabajo...</p>
+  </div>
+  <div id="root"></div>
+
+<script>
+const IND="#1A2580",CEL="#00AEEF";
+const e=React.createElement;
+const {useState,useEffect,useRef,useMemo}=React;
+
+// PSICOMETRÍA: 5 RASGOS × 4 ÍTEMS 
+// invertido:true = respuesta alta indica rasgo BAJO (se invierte al calcular)
+const RASGOS=[
+  {
+    id:"honestidad",
+    nombre:"Honestidad e Integridad",
+    icono:"🔒",
+    descripcion:"Seguridad alimentaria y ética laboral",
+    color:"#7c3aed",
+    bg:"#ede9fe",
+    items:[
+      {id:"h1",texto:"Reportaría de inmediato cualquier irregularidad que detectara en el proceso productivo, aunque nadie más lo viera.",invertido:false},
+      {id:"h2",texto:"Si encontrara un error que yo mismo cometí, lo ocultaría para evitar llamadas de atención.",invertido:true},
+      {id:"h3",texto:"Me negaría a participar en prácticas que pudieran dañar el producto o poner en riesgo a los consumidores, incluso si mis compañeros lo hacen.",invertido:false},
+      {id:"h4",texto:"Las reglas y procedimientos de seguridad son importantes seguirlos aunque nadie esté supervisando.",invertido:false},
+    ]
+  },
+  {
+    id:"tolerancia",
+    nombre:"Tolerancia al Estrés",
+    icono:"⚡",
+    descripcion:"Manejo emocional bajo presión",
+    color:"#d97706",
+    bg:"#fef3c7",
+    items:[
+      {id:"t1",texto:"Cuando hay mucha presión en el trabajo, mantengo la calma y sigo los procedimientos establecidos.",invertido:false},
+      {id:"t2",texto:"Bajo situaciones de emergencia tiendo a actuar impulsivamente sin pensar en las consecuencias.",invertido:true},
+      {id:"t3",texto:"Puedo trabajar eficientemente incluso cuando hay ruido, calor u otras condiciones difíciles.",invertido:false},
+      {id:"t4",texto:"Los conflictos con compañeros me afectan tanto que me cuesta concentrarme en mis tareas.",invertido:true},
+    ]
+  },
+  {
+    id:"resultados",
+    nombre:"Orientación a Resultados",
+    icono:"🎯",
+    descripcion:"Compromiso con metas y calidad",
+    color:"#059669",
+    bg:"#d1fae5",
+    items:[
+      {id:"r1",texto:"Me esfuerzo por superar las metas que me asignan, no solo por cumplirlas.",invertido:false},
+      {id:"r2",texto:"Prefiero hacer mi trabajo 'a medias' antes de pedir ayuda a un compañero o supervisor.",invertido:true},
+      {id:"r3",texto:"Busco formas de mejorar mi desempeño aunque no me lo pidan.",invertido:false},
+      {id:"r4",texto:"Cuando un proceso no está dando los resultados esperados, propongo soluciones.",invertido:false},
+    ]
+  },
+  {
+    id:"equipo",
+    nombre:"Trabajo en Equipo",
+    icono:"🤝",
+    descripcion:"Colaboración y comunicación",
+    color:"#0284c7",
+    bg:"#dbeafe",
+    items:[
+      {id:"e1",texto:"Comparto información útil con mis compañeros aunque no me la pidan directamente.",invertido:false},
+      {id:"e2",texto:"Cuando un compañero comete un error prefiero no decirle nada para evitar conflictos.",invertido:true},
+      {id:"e3",texto:"Me adapto fácilmente cuando me cambian de área o de equipo de trabajo.",invertido:false},
+      {id:"e4",texto:"El éxito del equipo es más importante que mis méritos individuales.",invertido:false},
+    ]
+  },
+  {
+    id:"responsabilidad",
+    nombre:"Responsabilidad",
+    icono:"📋",
+    descripcion:"Cumplimiento y normas de seguridad",
+    color:"#be185d",
+    bg:"#fce7f3",
+    items:[
+      {id:"rs1",texto:"Cumplo con mis horarios y compromisos laborales incluso cuando nadie me lo recuerda.",invertido:false},
+      {id:"rs2",texto:"Si me dan una tarea que no me corresponde, simplemente la ignoro.",invertido:true},
+      {id:"rs3",texto:"Sigo los procedimientos de seguridad e higiene aunque me parezcan innecesarios.",invertido:false},
+      {id:"rs4",texto:"Asumo las consecuencias de mis errores sin culpar a factores externos.",invertido:false},
+    ]
+  },
+];
+
+const LIKERT_LABELS=["Totalmente\nen desacuerdo","En\ndesacuerdo","Ni de acuerdo\nni en desacuerdo","De\nacuerdo","Totalmente\nde acuerdo"];
+
+// STORAGE 
+const PUESTOS_DEFAULT=[
+  // PRODUCCIÓN 
+  {id:"aux_general",nombre:"Auxiliar General de Producción",area:"Producción",requisitos:"Secundaria o bachillerato, disponibilidad de turno (matutino/vespertino/nocturno), experiencia en líneas de manufactura deseable, conocimiento básico de BPM y normas de higiene FSSC 22000",activo:true},
+  {id:"sup_linea_prod",nombre:"Supervisor de Línea",area:"Producción",requisitos:"2+ años supervisando personal operativo en industria de bebidas o alimentos, conocimiento de indicadores OEE, FSSC 22000 y NOM-STPS, liderazgo de equipos de 10-30 personas",activo:true},
+  {id:"planeador_prod",nombre:"Planeador de Producción",area:"Producción",requisitos:"Lic. en Ingeniería Industrial o afín, 3+ años en planeación de producción, manejo de MRP/ERP, experiencia en industria embotelladora o alimentos, FSSC 22000",activo:true},
+  {id:"jefe_prod",nombre:"Jefe de Producción",area:"Producción",requisitos:"Lic. en Ingeniería Industrial o afín, 4+ años en manufactura de bebidas, gestión de múltiples líneas de producción, NOM-STPS, FSSC 22000, liderazgo de supervisores",activo:true},
+  {id:"gerente_planta",nombre:"Gerente de Planta",area:"Producción",requisitos:"Lic. en Ingeniería Industrial, Mecánica o afín, 7+ años en planta embotelladora, gestión integral de operaciones, FSSC 22000, SMETA 4 pilares, NOM-STPS, presupuesto y KPIs de planta",activo:true},
+  // MANTENIMIENTO 
+  {id:"jefe_mant",nombre:"Jefe de Mantenimiento",area:"Mantenimiento",requisitos:"Lic. en Ingeniería Mecánica, Eléctrica o afín, 5+ años en mantenimiento industrial, gestión de mantenimiento preventivo/correctivo, FSSC 22000, NOM-001/NOM-004 STPS, manejo de CMMS",activo:true},
+  {id:"coord_mant",nombre:"Coordinador de Mantenimiento",area:"Mantenimiento",requisitos:"Ingeniería Mecánica o Eléctrica, 3+ años en mantenimiento de equipos industriales en planta de bebidas o alimentos, programación de mantenimiento preventivo, NOM-STPS",activo:true},
+  {id:"planeador_mant",nombre:"Planeador de Mantenimiento",area:"Mantenimiento",requisitos:"Técnico o Ing. en Mantenimiento Industrial, 3+ años planificando órdenes de trabajo y refacciones, manejo de SAP PM o CMMS, indicadores MTBF/MTTR, FSSC 22000",activo:true},
+  {id:"mecanico",nombre:"Mecánico Industrial",area:"Mantenimiento",requisitos:"Técnico en Mecánica Industrial, 2+ años en mantenimiento de líneas de embotellado, llenado o envasado, lectura de planos mecánicos, disponibilidad de turno, NOM-STPS",activo:true},
+  {id:"electricista",nombre:"Electricista Industrial",area:"Mantenimiento",requisitos:"Técnico en Electricidad Industrial, 2+ años en instalaciones eléctricas industriales, manejo de tableros, variadores de frecuencia, PLC básico, NOM-001 y NOM-004 STPS",activo:true},
+  // ALMACENES Y LOGÍSTICA 
+  {id:"coord_mp",nombre:"Coordinador de Almacén de Materia Prima",area:"Logística",requisitos:"Lic. en Administración, Logística o afín, 3+ años en almacenes de MP en industria de alimentos o bebidas, FSSC 22000, control de inventarios, WMS, buenas prácticas de almacenamiento",activo:true},
+  {id:"coord_pt",nombre:"Coordinador de Almacén de Producto Terminado",area:"Logística",requisitos:"Lic. en Logística o afín, 3+ años en almacén de PT, FSSC 22000, SMETA, manejo de WMS/ERP, control PEPS, coordinación con embarques y ventas",activo:true},
+  {id:"jefe_logistica",nombre:"Jefe de Logística",area:"Logística",requisitos:"Lic. en Logística, Ing. Industrial o afín, 5+ años en logística de distribución nacional, flota de transporte, SMETA 4 pilares, indicadores de servicio, coordinación de tráfico y almacenes",activo:true},
+  {id:"coord_trafico",nombre:"Coordinador de Tráfico",area:"Logística",requisitos:"Lic. en Logística o Administración, 3+ años coordinando flota propia y fleteras, programación de rutas, documentación de transporte (carta porte CFDI), conocimiento SCT",activo:true},
+  {id:"estibador",nombre:"Estibador",area:"Logística",requisitos:"Secundaria o bachillerato, experiencia en carga y descarga de producto, manejo de tarimas, disponibilidad de turno, buenas prácticas de manufactura, FSSC 22000 básico",activo:true},
+  {id:"montacarguista",nombre:"Montacarguista",area:"Logística",requisitos:"Secundaria o bachillerato, licencia de montacargas vigente, 2+ años operando montacargas contrabalanceado y reach truck, FSSC 22000, NOM-006 STPS, disponibilidad de turno",activo:true},
+  // CALIDAD 
+  {id:"jefe_calidad",nombre:"Jefe de Calidad",area:"Calidad",requisitos:"Lic. en Ingeniería en Alimentos, Química o afín, 5+ años en sistemas de calidad de bebidas, líder de auditorías FSSC 22000, SMETA 4 pilares, manejo de laboratorio, gestión de proveedores",activo:true},
+  {id:"sup_calidad_linea",nombre:"Supervisor de Calidad en Línea",area:"Calidad",requisitos:"Lic. o Técnico en Alimentos, Química o afín, 2+ años supervisando calidad en líneas de embotellado, FSSC 22000, BPM, pruebas fisicoquímicas y microbiológicas, NOM-STPS",activo:true},
+  {id:"sup_calidad_mp",nombre:"Supervisor de Calidad de Materias Primas",area:"Calidad",requisitos:"Lic. en Alimentos, Química o afín, 2+ años en recepción y análisis de MP, FSSC 22000, evaluación de proveedores, análisis sensorial y fisicoquímico, documentación de no conformidades",activo:true},
+  {id:"analista_agua",nombre:"Analista de Tratamiento de Agua",area:"Calidad",requisitos:"Lic. o Técnico en Química, Ing. Ambiental o afín, 2+ años en plantas de tratamiento de agua para bebidas, análisis microbiológico y fisicoquímico, FSSC 22000, NOM-127-SSA1",activo:true},
+  // ADMINISTRACIÓN 
+  {id:"contador_gral",nombre:"Contador General",area:"Administración",requisitos:"Lic. en Contaduría Pública, CPA, 5+ años en contabilidad de empresa manufacturera, IMSS, ISR, IVA, cierre mensual, auditorías fiscales, manejo de CONTPAQi o SAP",activo:true},
+  {id:"analista_contable",nombre:"Analista Contable",area:"Administración",requisitos:"Lic. en Contaduría, 2+ años en contabilidad general, registro de pólizas, conciliaciones bancarias, declaraciones fiscales, manejo de CONTPAQi o SAP, Excel avanzado",activo:true},
+  {id:"credito_cobranza",nombre:"Analista de Crédito y Cobranza",area:"Administración",requisitos:"Lic. en Contaduría o Administración, 2+ años en cobranza empresarial, evaluación de crédito, gestión de cartera vencida, negociación con clientes, Excel avanzado, CRM",activo:true},
+  {id:"tesoreria",nombre:"Analista de Tesorería",area:"Administración",requisitos:"Lic. en Contaduría, Finanzas o Administración, 2+ años en tesorería, flujo de efectivo, pagos a proveedores, conciliaciones bancarias, manejo de banca electrónica y SAP/CONTPAQi",activo:true},
+  {id:"liquidaciones",nombre:"Analista de Liquidaciones",area:"Administración",requisitos:"Lic. en Contaduría o Administración, 2+ años en liquidación de nómina y prestaciones, LFT, IMSS, INFONAVIT, manejo de Aspel NOI o SAP HCM, CFDI de nómina",activo:true},
+  {id:"gerente_compras",nombre:"Gerente de Compras",area:"Administración",requisitos:"Lic. en Administración, Ing. Industrial o afín, 6+ años en compras estratégicas en empresa manufacturera, negociación con proveedores nacionales e internacionales, SMETA 4 pilares, FSSC 22000, manejo de ERP",activo:true},
+  {id:"jefe_compras",nombre:"Jefe de Compras",area:"Administración",requisitos:"Lic. en Administración o afín, 4+ años en compras, evaluación y desarrollo de proveedores, SMETA 4 pilares, licitaciones, manejo de SAP/ERP, Excel avanzado",activo:true},
+  {id:"aux_compras",nombre:"Auxiliar de Compras",area:"Administración",requisitos:"Lic. en Administración o carrera afín (trunca o en curso), 1+ año en área de compras, elaboración de órdenes de compra, seguimiento a proveedores, manejo de ERP, Excel intermedio",activo:true},
+  // RECURSOS HUMANOS 
+  {id:"jefe_rh",nombre:"Jefe de Recursos Humanos",area:"Recursos Humanos",requisitos:"Lic. en Administración, Psicología o afín, 4+ años en RH de empresa manufacturera, nómina, reclutamiento, relaciones laborales, NOM-STPS, SMETA 4 pilares, FSSC 22000",activo:true},
+  {id:"coord_sst",nombre:"Coordinador de Seguridad e Higiene",area:"Recursos Humanos",requisitos:"Lic. en Ing. en Seguridad, Química o afín, 3+ años en SST industrial, NOM-STPS (001,002,004,006,017,022,025,026,029,030), SMETA 4 pilares, auditorías internas, brigadas de emergencia, Protección Civil",activo:true},
+  {id:"nominista",nombre:"Nominista",area:"Recursos Humanos",requisitos:"Lic. en Contaduría o Administración, 2+ años en procesamiento de nómina, Aspel NOI o SAP HCM, IMSS (SUA), INFONAVIT, ISR, CFDI de nómina timbrado, LFT 2024",activo:true},
+  {id:"gerente_rh",nombre:"Gerente de Recursos Humanos",area:"Recursos Humanos",requisitos:"Lic. en Psicología, Administración o afín, 7+ años en RH de empresa manufacturera certificada, NOM-STPS, SMETA 4 pilares, FSSC 22000, relaciones sindicales, CCT, nómina, desarrollo organizacional",activo:true},
+  // VENTAS 
+  {id:"asesor_comercial",nombre:"Asesor Comercial",area:"Ventas",requisitos:"Lic. en Administración, Mercadotecnia o afín, 2+ años en ventas B2B de bebidas o alimentos, apertura de clientes, cumplimiento de cuotas, manejo de CRM, disponibilidad para viajar",activo:true},
+  {id:"sup_rutas",nombre:"Supervisor de Rutas",area:"Ventas",requisitos:"Lic. en Administración o afín, 3+ años supervisando fuerza de ventas en ruta, indicadores de cobertura y efectividad, manejo de distribución de bebidas, licencia de conducir tipo E deseable",activo:true},
+  {id:"vendedor_ruta",nombre:"Vendedor de Ruta",area:"Ventas",requisitos:"Bachillerato, 1+ año en ventas de ruta de bebidas o consumo masivo, licencia de conducir tipo B vigente, conocimiento de zona Tehuacán y región, manejo de pedidos y cobranza",activo:true},
+  // MERCADOTECNIA 
+  {id:"gerente_trade",nombre:"Gerente de Trade Marketing",area:"Mercadotecnia",requisitos:"Lic. en Mercadotecnia, Administración o afín, 5+ años en trade marketing de bebidas o consumo masivo, gestión de presupuesto, análisis de mercado, coordinación con ventas y producción, manejo de KPIs comerciales",activo:true},
+  {id:"coord_mkt",nombre:"Coordinador de Mercadotecnia",area:"Mercadotecnia",requisitos:"Lic. en Mercadotecnia o Comunicación, 3+ años en marketing digital y tradicional, manejo de redes sociales, campañas BTL/ATL, diseño básico (Canva/Adobe), análisis de métricas, industria de bebidas deseable",activo:true},
+];
+// SUPABASE
+const SB_URL="https://gkqwvfbwjtefayhpalcr.supabase.co";
+const SB_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdrcXd2ZmJ3anRlZmF5aHBhbGNyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDcwMjYsImV4cCI6MjA5MTU4MzAyNn0.yiWnknLyxUp2jccAYikeeFHe-tzMrQb3e2nO21ExQyk";
+const SB_H={"apikey":SB_KEY,"Authorization":"Bearer "+SB_KEY,"Content-Type":"application/json","Prefer":"return=representation"};
+function sbToJs(c){return{id:c.id,nombre:c.nombre,email:c.email,telefono:c.telefono,puesto_id:c.puesto_id,puesto_nombre:c.puesto_nombre,anos_experiencia:c.anos_experiencia,logros:c.logros,disponibilidad:c.disponibilidad,pretension:c.pretension,cvNombre:c.cv_nombre,cvData:c.cv_data,score:c.score,psicoScores:c.psico_scores,estatus:c.estatus,fecha:c.fecha};}
+function jsToSb(c){return{id:c.id,nombre:c.nombre,email:c.email,telefono:c.telefono,puesto_id:c.puesto_id,puesto_nombre:c.puesto_nombre,anos_experiencia:c.anos_experiencia,logros:c.logros,disponibilidad:c.disponibilidad,pretension:c.pretension,cv_nombre:c.cvNombre||null,cv_data:c.cvData&&c.cvData.length<1500000?c.cvData:null,score:c.score,psico_scores:c.psicoScores||null,estatus:c.estatus,fecha:c.fecha};}
+async function getCandidatos(){
+  try{const r=await fetch(SB_URL+"/rest/v1/candidatos?select=*&order=fecha.desc",{headers:SB_H});if(!r.ok)throw new Error(r.status);return(await r.json()).map(sbToJs);}
+  catch(e){console.warn("SB get:",e);return _localGet();}
+}
+async function insertCandidato(c){
+  try{await fetch(SB_URL+"/rest/v1/candidatos",{method:"POST",headers:SB_H,body:JSON.stringify(jsToSb(c))});}
+  catch(e){console.warn("SB insert:",e);_localSave([..._localGet(),c]);}
+}
+async function updateCandidato(id,fields){
+  const sb={};
+  if(fields.estatus!==undefined)sb.estatus=fields.estatus;
+  if(fields.telefono!==undefined)sb.telefono=fields.telefono;
+  try{await fetch(SB_URL+"/rest/v1/candidatos?id=eq."+id,{method:"PATCH",headers:{...SB_H,"Prefer":"return=minimal"},body:JSON.stringify(sb)});}
+  catch(e){console.warn("SB update:",e);}
+}
+async function deleteCandidato(id){
+  try{await fetch(SB_URL+"/rest/v1/candidatos?id=eq."+id,{method:"DELETE",headers:SB_H});}
+  catch(e){console.warn("SB delete:",e);}
+}
+const _memStore={};
+function _getStore(k){try{const v=localStorage.getItem(k);if(v!==null)return v;}catch(e){}try{const v=sessionStorage.getItem(k);if(v!==null)return v;}catch(e){}return _memStore[k]||null;}
+function _setStore(k,v){try{localStorage.setItem(k,v);}catch(e){}try{sessionStorage.setItem(k,v);}catch(e){}_memStore[k]=v;}
+function _localGet(){try{return JSON.parse(_getStore("hm_candidatos")||"[]")}catch{return[]}}
+function _localSave(l){_setStore("hm_candidatos",JSON.stringify(l))}
+function getPuestos(){try{return JSON.parse(_getStore("hm_puestos")||"null")||PUESTOS_DEFAULT}catch{return PUESTOS_DEFAULT}}
+function savePuestos(l){_setStore("hm_puestos",JSON.stringify(l))}
+
+// HELPERS 
+function scoreColor(s){return s>=75?"#22c55e":s>=55?"#f59e0b":"#ef4444"}
+function scoreLabel(s){return s>=75?"Alto potencial ✓":s>=55?"A evaluar":"No califica"}
+function psicoColor(s){return s>=80?"#22c55e":s>=60?"#f59e0b":"#ef4444"}
+function psicoLabel(s){return s>=80?"Favorable ✓":s>=60?"Moderado":"Bajo — Revisar"}
+function formatDate(iso){if(!iso)return"—";return new Date(iso).toLocaleDateString("es-MX",{day:"2-digit",month:"short",year:"numeric"})}
+
+// Calcular score psicométrico de las respuestas
+function calcPsicoScores(respuestas){
+  const rasgosScore={};
+  RASGOS.forEach(rasgo=>{
+    let suma=0,count=0;
+    rasgo.items.forEach(item=>{
+      const val=respuestas[item.id];
+      if(val!=null){
+        const puntaje=item.invertido?(6-val):val; // invertir si aplica
+        suma+=puntaje;count++;
+      }
+    });
+    rasgosScore[rasgo.id]=count>0?Math.round((suma/(count*5))*100):0;
+  });
+  const total=Math.round(Object.values(rasgosScore).reduce((a,b)=>a+b,0)/RASGOS.length);
+  return{rasgos:rasgosScore,total};
+}
+
+async function callClaude(sys,user,max=400){
+  const body={model:"claude-sonnet-4-20250514",max_tokens:max,messages:[{role:"user",content:user}]};
+  if(sys)body.system=sys;
+  const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+  if(!r.ok)throw new Error("API "+r.status);
+  const d=await r.json();
+  return d.content[0].text;
+}
+
+function exportCSV(lista){
+  const h=["Nombre","Email","Telefono","Puesto","Experiencia","Disponibilidad","Pretension","Score Perfil","Score Psico","Honestidad","Tolerancia Estres","Orient. Resultados","Trabajo Equipo","Responsabilidad","Estatus","Fecha","CV"];
+  const rows=lista.map(c=>[
+    c.nombre,c.email,c.telefono,c.puesto_nombre,c.anos_experiencia,c.disponibilidad,c.pretension,
+    c.score+"/100",
+    c.psicoScores?c.psicoScores.total+"/100":"",
+    c.psicoScores?c.psicoScores.rasgos.honestidad+"/100":"",
+    c.psicoScores?c.psicoScores.rasgos.tolerancia+"/100":"",
+    c.psicoScores?c.psicoScores.rasgos.resultados+"/100":"",
+    c.psicoScores?c.psicoScores.rasgos.equipo+"/100":"",
+    c.psicoScores?c.psicoScores.rasgos.responsabilidad+"/100":"",
+    c.estatus,formatDate(c.fecha),c.cvNombre?"Si":"No"
+  ]);
+  const csv=[h,...rows].map(r=>r.map(v=>'"'+String(v||"").replace(/"/g,'""')+'"').join("\t")).join("\r\n");
+  window._csvData=csv;
+  window.dispatchEvent(new CustomEvent("hm_show_csv"));
+}
+
+function downloadCV(c){
+  if(!c.cvData||!c.cvNombre)return;
+  window._cvCandidate=c;
+  if(window._cvShowFn) window._cvShowFn(c);
+}
+
+const SYS="Eres el asistente de reclutamiento de HM Talento Estratégico, consultora de RH en Tehuacán, Puebla. Tono profesional, amigable y conciso. Siempre en español. Máximo 2-3 oraciones. Una sola pregunta a la vez.";
+const AREA_COLORS={"Producción":["#dbeafe","#1e40af"],"Mantenimiento":["#fef9c3","#854d0e"],"Logística":["#ede9fe","#6d28d9"],"Calidad":["#ecfdf5","#065f46"],"Administración":["#fef3c7","#92400e"],"Recursos Humanos":["#fce7f3","#9d174d"],"Ventas":["#dcfce7","#166534"],"Mercadotecnia":["#ffe4e6","#9f1239"],"TI":["#f0f9ff","#0369a1"],"Dirección":["#f3f4f6","#374151"]};
+
+// RENDER TEXT 
+function RenderText({text}){
+  if(!text)return null;
+  return e(React.Fragment,null,...text.split(/(\*\*[^*]+\*\*)/).map((p,i)=>
+    p.startsWith("**")?e("strong",{key:i},p.slice(2,-2)):p
+  ));
+}
+
+// BOT / USER BUBBLES 
+function BotBubble({children}){
+  return e("div",{className:"fadein",style:{display:"flex",alignItems:"flex-start",gap:8}},
+    e("div",{style:{width:30,height:30,borderRadius:"50%",background:IND,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,flexShrink:0,marginTop:2}},"🤖"),
+    e("div",{style:{maxWidth:"82%",padding:"11px 15px",borderRadius:"18px 18px 18px 4px",background:"#fff",border:"1px solid #e4e8f0",fontSize:14,lineHeight:1.65,boxShadow:"0 2px 8px rgba(0,0,0,.06)",whiteSpace:"pre-wrap",color:"#1a1a2e"}},children)
+  );
+}
+function UserBubble({text}){
+  return e("div",{className:"fadein",style:{display:"flex",justifyContent:"flex-end"}},
+    e("div",{style:{maxWidth:"76%",padding:"11px 15px",borderRadius:"18px 18px 4px 18px",background:IND,color:"#fff",fontSize:14,lineHeight:1.65}},text)
+  );
+}
+
+// UPLOAD WIDGET 
+function UploadWidget({onEnviar}){
+  const [cvFile,setCvFile]=useState(null);
+  const [drag,setDrag]=useState(false);
+  const [enviando,setEnviando]=useState(false);
+  const fileRef=useRef(null);
+  function handleFile(f){
+    if(!f)return;
+    const ok=["application/pdf","application/msword","application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
+    if(!ok.includes(f.type)){alert("Solo PDF o Word");return;}
+    if(f.size>5*1024*1024){alert("Máximo 5 MB");return;}
+    setCvFile(f);
+  }
+  async function submit(omitir){
+    setEnviando(true);
+    let cvData=null,cvNombre=null;
+    if(!omitir&&cvFile){
+      cvData=await new Promise((res,rej)=>{const r=new FileReader();r.onload=ev=>res(ev.target.result);r.onerror=rej;r.readAsDataURL(cvFile);});
+      cvNombre=cvFile.name;
+    }
+    onEnviar(cvData,cvNombre);
+  }
+  return e(BotBubble,null,
+    e("div",{style:{minWidth:260}},
+      e("p",{style:{fontSize:14,marginBottom:14,lineHeight:1.6}},"📋 Para darte seguimiento oportuno adjunta tu ",e("strong",null,"CV o carta de presentación")," en ",e("strong",null,"PDF o Word"),". 👇"),
+      e("div",{
+        className:"upload-zone",
+        style:{marginBottom:12,background:cvFile?"#f0fff4":drag?"#f0faff":"#fafafa",borderColor:cvFile?"#22c55e":drag?CEL:"#d1d5db"},
+        onDragOver:ev=>{ev.preventDefault();setDrag(true)},
+        onDragLeave:()=>setDrag(false),
+        onDrop:ev=>{ev.preventDefault();setDrag(false);handleFile(ev.dataTransfer.files[0])},
+        onClick:()=>!enviando&&fileRef.current&&fileRef.current.click()
+      },
+        e("input",{ref:fileRef,type:"file",accept:".pdf,.doc,.docx",style:{display:"none"},onChange:ev=>handleFile(ev.target.files[0])}),
+        cvFile
+          ? e("div",null,e("div",{style:{fontSize:28,marginBottom:6}},"✅"),e("div",{style:{fontWeight:700,color:"#166534",fontSize:14}},cvFile.name),e("div",{style:{fontSize:12,color:"#888",marginTop:3}},(cvFile.size/1024).toFixed(0)+" KB · Toca para cambiar"))
+          : e("div",null,e("div",{style:{fontSize:32,marginBottom:8}},"📎"),e("div",{style:{fontWeight:600,color:"#555",fontSize:14,marginBottom:4}},"Arrastra tu CV aquí"),e("div",{style:{fontSize:12,color:"#999"}},"PDF · Word · Máx. 5 MB"),e("div",{style:{marginTop:10,display:"inline-block",padding:"7px 18px",background:CEL,color:"#fff",borderRadius:8,fontSize:13,fontWeight:600}},"Seleccionar archivo"))
+      ),
+      e("div",{style:{display:"flex",gap:8}},
+        e("button",{onClick:()=>submit(false),disabled:!cvFile||enviando,className:"bpri",style:{flex:2,fontSize:13,padding:"10px 14px",opacity:(!cvFile||enviando)?.5:1}},enviando?"Enviando...":"📤 Enviar CV y continuar"),
+        e("button",{onClick:()=>submit(true),disabled:enviando,style:{flex:1,fontSize:12,padding:"10px 14px",border:"1.5px solid #d1d5db",borderRadius:10,background:"transparent",color:"#888",fontWeight:500,cursor:"pointer"}},"Omitir")
+      ),
+      e("p",{style:{fontSize:11,color:"#bbb",marginTop:8,textAlign:"center"}},"Tu información se maneja de forma confidencial")
+    )
+  );
+}
+
+// PSICOMETRÍA WIDGET 
+function PsicometriaWidget({onCompletar,nombre}){
+  const todosItems=RASGOS.flatMap(r=>r.items.map(item=>({...item,rasgoId:r.id,rasgoNombre:r.nombre,rasgoIcono:r.icono})));
+  const [idx,setIdx]=useState(0);
+  const [respuestas,setRespuestas]=useState({});
+  const [selActual,setSelActual]=useState(null);
+  const total=todosItems.length;
+  const item=todosItems[idx];
+  const rasgoActual=RASGOS.find(r=>r.id===item.rasgoId);
+  const progreso=Math.round((idx/total)*100);
+
+  function responder(val){
+    setSelActual(val);
+    setTimeout(()=>{
+      const nuevas={...respuestas,[item.id]:val};
+      setRespuestas(nuevas);
+      setSelActual(null);
+      if(idx+1>=total){
+        onCompletar(nuevas);
+      } else {
+        setIdx(idx+1);
+      }
+    },300);
+  }
+
+  return e(BotBubble,null,
+    e("div",{style:{minWidth:280}},
+      // Header de la sección
+      idx===0&&e("div",{style:{marginBottom:16,padding:"12px 14px",background:"linear-gradient(135deg,"+IND+",#0c175c)",borderRadius:12,color:"#fff"}},
+        e("div",{style:{fontSize:13,fontWeight:700,marginBottom:4}},"🧠 Evaluación Psicométrica"),
+        e("p",{style:{fontSize:12,opacity:.85,lineHeight:1.5}},"Hola "+nombre+", el siguiente paso es una breve evaluación de "+total+" preguntas. No hay respuestas correctas o incorrectas — responde con honestidad.")
+      ),
+      // Progreso
+      e("div",{style:{marginBottom:14}},
+        e("div",{style:{display:"flex",justifyContent:"space-between",marginBottom:6}},
+          e("span",{style:{fontSize:11,fontWeight:700,color:rasgoActual.color}},rasgoActual.icono+" "+rasgoActual.nombre),
+          e("span",{style:{fontSize:11,color:"#aaa"}},(idx+1)+"/"+total)
+        ),
+        e("div",{className:"psico-progress"},e("div",{className:"psico-bar",style:{width:Math.max(3,progreso)+"%"}}))
+      ),
+      // Pregunta
+      e("div",{style:{background:"#f8f9fb",borderRadius:12,padding:"14px 16px",marginBottom:14,borderLeft:"3px solid "+rasgoActual.color}},
+        e("p",{style:{fontSize:14,color:"#1a1a2e",lineHeight:1.6,fontWeight:500}},item.texto)
+      ),
+      // Escala Likert
+      e("div",{style:{marginBottom:8}},
+        e("div",{style:{display:"flex",gap:4,marginBottom:6}},
+          ...[1,2,3,4,5].map(val=>
+            e("button",{
+              key:val,
+              className:"likert-btn"+(selActual===val?" likert-sel":""),
+              onClick:()=>responder(val),
+              style:{minHeight:64}
+            },
+              e("div",{style:{fontSize:16,marginBottom:4}},val),
+              e("div",{style:{fontSize:9,lineHeight:1.3,opacity:.75}},LIKERT_LABELS[val-1])
+            )
+          )
+        ),
+        e("div",{style:{display:"flex",justifyContent:"space-between",fontSize:10,color:"#bbb",padding:"0 2px"}},
+          e("span",null,"Totalmente en\ndesacuerdo"),
+          e("span",null,"Totalmente de\nacuerdo")
+        )
+      )
+    )
+  );
+}
+
+// RESULTADO PSICOMÉTRICO 
+function ResultadoPsico({psicoScores,nombre}){
+  const {total,rasgos}=psicoScores;
+  return e("div",{className:"fadein",style:{background:"#fff",border:"2px solid "+psicoColor(total),borderRadius:16,overflow:"hidden",margin:"8px 0"}},
+    e("div",{style:{background:IND,padding:"16px 20px",color:"#fff"}},
+      e("div",{style:{fontSize:13,opacity:.8,marginBottom:4}},"Resultado Psicométrico — "+nombre),
+      e("div",{style:{display:"flex",alignItems:"center",gap:12}},
+        e("div",{style:{fontSize:40,fontWeight:800,color:psicoColor(total)}},total),
+        e("div",null,e("div",{style:{fontSize:14,fontWeight:700}},"/ 100 — Score global"),e("div",{style:{fontSize:13,color:psicoColor(total),fontWeight:600}},psicoLabel(total)))
+      )
+    ),
+    e("div",{style:{padding:"16px 20px"}},
+      e("div",{style:{fontSize:12,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:.5,marginBottom:12}},"Resultado por rasgo"),
+      ...RASGOS.map(rasgo=>{
+        const val=rasgos[rasgo.id]||0;
+        return e("div",{key:rasgo.id,className:"rasgo-card",style:{background:rasgo.bg}},
+          e("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}},
+            e("div",{style:{display:"flex",alignItems:"center",gap:8}},
+              e("span",{style:{fontSize:18}},rasgo.icono),
+              e("span",{style:{fontSize:13,fontWeight:600,color:rasgo.color}},rasgo.nombre)
+            ),
+            e("div",{style:{fontSize:16,fontWeight:800,color:psicoColor(val)}},val+"/100")
+          ),
+          e("div",{style:{height:6,background:"rgba(0,0,0,.1)",borderRadius:3,overflow:"hidden"}},
+            e("div",{style:{height:"100%",width:val+"%",background:rasgo.color,borderRadius:3,transition:"width .6s ease"}})
+          )
+        );
+      })
+    )
+  );
+}
+
+// CHAT VIEW 
+function ChatView({puesto,onBack}){
+  const [msgs,setMsgs]=useState([]);
+  const [input,setInput]=useState("");
+  const [loading,setLoading]=useState(false);
+  const [etapa,setEtapa]=useState("nombre");
+  const [datos,setDatos]=useState({puesto_id:puesto.id,puesto_nombre:puesto.nombre});
+  const [done,setDone]=useState(false);
+  const [scoreInfo,setScoreInfo]=useState(null);
+  const [esperandoCV,setEsperandoCV]=useState(false);
+  const [esperandoPsico,setEsperandoPsico]=useState(false);
+
+  const bottomRef=useRef(null);
+
+  useEffect(()=>{
+    setMsgs([{tipo:"bot",texto:"¡Hola! 👋 Soy el asistente de selección de **HM Talento Estratégico**.\n\nQuiero conocerte para la posición de **"+puesto.nombre+"** ("+puesto.area+").\n\nEl proceso toma solo 8 minutos e incluye una evaluación psicométrica. Comencemos: ¿cuál es tu **nombre completo**?"}]);
+  },[]);
+  useEffect(()=>{bottomRef.current&&bottomRef.current.scrollIntoView({behavior:"smooth"})},[msgs,loading,esperandoCV,esperandoPsico]);
+
+  const addBot=t=>setMsgs(p=>[...p,{tipo:"bot",texto:t}]);
+  const addUser=t=>setMsgs(p=>[...p,{tipo:"user",texto:t}]);
+
+  async function enviar(){
+    const val=input.trim();
+    if(!val||loading||done||esperandoCV||esperandoPsico)return;
+    setInput("");addUser(val);setLoading(true);
+    try{await procesar(val)}catch(err){console.error(err);addBot("⚠️ Error de conexión. Intenta de nuevo.")}
+    setLoading(false);
+  }
+
+  async function recibirCV(cvData,cvNombre){
+    setEsperandoCV(false);
+    setMsgs(p=>[...p,{tipo:"user",texto:cvNombre?"📎 "+cvNombre:"Prefiero omitir el CV por ahora"}]);
+    // Guardar CV en datos y pasar a psicometría
+    setDatos(d=>({...d,cvData,cvNombre}));
+    addBot("¡Perfecto! 🎉 Has completado la entrevista de perfil.\n\nAhora aplicaremos una **evaluación psicométrica** breve ("+RASGOS.flatMap(r=>r.items).length+" preguntas). Responde con honestidad — no hay respuestas buenas o malas. Tus resultados son confidenciales.");
+    setEsperandoPsico(true);
+  }
+
+  async function recibirPsico(respuestas){
+    setEsperandoPsico(false);
+    setMsgs(p=>[...p,{tipo:"user",texto:"✅ Evaluación psicométrica completada"}]);
+    const psico=calcPsicoScores(respuestas);
+
+    setLoading(true);
+    try{await guardarCandidato(datos,psico)}
+    catch(e){console.error(e);addBot("⚠️ Error al guardar. Intenta de nuevo.")}
+    setLoading(false);
+  }
+
+  async function guardarCandidato(d,psicoScores){
+    // 1. Guardar candidato PRIMERO con score provisional
+    const scoreProvisional=psicoScores.total>=70?75:psicoScores.total>=55?65:45;
+    const candidatoBase={
+      ...d,score:scoreProvisional,psicoScores,
+      id:Date.now().toString(),
+      fecha:new Date().toISOString(),
+      estatus:scoreProvisional>=75?"Preseleccionado":scoreProvisional>=55?"En revisión":"Descartado",
+    };
+    await insertCandidato(candidatoBase);
+
+    // 2. Intentar mejorar score con Claude (si falla, el candidato ya está guardado)
+        let msg="\u00a1Muchas gracias, "+d.nombre+"!\n\nHemos recibido tu expediente completo de manera exitosa, incluyendo tu entrevista de perfil y evaluaci\u00f3n.\n\nEl equipo de HM Talento Estrat\u00e9gico revisar\u00e1 tu informaci\u00f3n y se comunicar\u00e1 contigo a la brevedad posible por WhatsApp o correo electr\u00f3nico para informarte los siguientes pasos.\n\n\u00a1Exito en tu proceso!";
+let scoreFinal=scoreProvisional;
+    try{
+      const prompt="Evalúa este candidato para "+d.puesto_nombre+" en HM Talento Estratégico.\n\nCANDIDATO:\n- Nombre: "+d.nombre+"\n- Experiencia: "+d.anos_experiencia+" años\n- Logros: "+d.logros+"\n- Disponibilidad: "+d.disponibilidad+"\n- Pretensión: "+d.pretension+"\n- CV: "+(d.cvNombre?"Sí ("+d.cvNombre+")":"No")+"\n\nREQUISITOS: "+puesto.requisitos+"\n\nINSTRUCCIONES:\n1. Escribe un mensaje de cierre cálido y profesional (2-3 párrafos). Agradece al candidato por su tiempo y por completar todo el proceso. NO menciones ningún puntaje, score, resultado ni calificación. Solo indícale que su expediente fue recibido exitosamente y que el equipo de HM Talento Estratégico se comunicará con él a la brevedad posible por WhatsApp o correo electrónico para informarle los siguientes pasos.\n2. Última línea exactamente: SCORE:XX";
+      const resp=await callClaude(SYS,prompt,600);
+      const match=resp.match(/SCORE:(\d+)/);
+      scoreFinal=match?Math.min(100,Math.max(0,parseInt(match[1]))):scoreProvisional;
+      msg=resp.replace(/SCORE:\d+/g,"").trim();
+      // Actualizar score en la lista guardada
+      await updateCandidato(candidatoBase.id,{estatus:scoreFinal>=75&&psicoScores.total>=70?"Preseleccionado":scoreFinal>=55&&psicoScores.total>=55?"En revisión":"Descartado"});
+    }catch(err){console.warn("Claude no disponible, usando score provisional:",err);}
+    addBot(msg);
+    setScoreInfo({score:scoreFinal,label:scoreLabel(scoreFinal),color:scoreColor(scoreFinal)});
+    setDone(true);
+  }
+
+  async function procesar(val){
+    const d={...datos};
+    // VALIDADORES
+    const esEmail=v=>/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim());
+    const esTel=v=>v.replace(/\D/g,"").length>=8;
+    const fmtSalario=v=>{const n=parseFloat(v.replace(/[^0-9.]/g,""));return isNaN(n)||n<=0?null:"$"+n.toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2});};
+
+    if(etapa==="nombre"){
+      if(val.trim().length<3||/^(.)\1+$/i.test(val.trim())){addBot("Por favor escribe tu **nombre completo**. Ejemplo: **Juan García López**");setLoading(false);return;}
+      d.nombre=val.trim();setDatos(d);setEtapa("email");addBot("Mucho gusto, **"+d.nombre+"**. 😊 ¿Cuál es tu **correo electrónico**?");
+    }
+    else if(etapa==="email"){
+      if(!esEmail(val)){addBot("El correo **"+val+"** no parece válido. Escríbelo completo. Ejemplo: **nombre@gmail.com**");setLoading(false);return;}
+      d.email=val.trim().toLowerCase();setDatos(d);setEtapa("telefono");addBot("Perfecto. ¿Y tu **teléfono o WhatsApp** (10 dígitos)?");
+    }
+    else if(etapa==="telefono"){
+      if(!esTel(val)){addBot("El número debe tener al menos **8 dígitos**. Ejemplo: **2381234567**");setLoading(false);return;}
+      d.telefono=val.replace(/\D/g,"");setDatos(d);setEtapa("experiencia");addBot("Gracias. ¿Cuántos **años de experiencia** tienes en el área de "+puesto.area+"?");
+    }
+    else if(etapa==="experiencia"){
+      const numMatch=val.match(/\d+/);
+      if(!numMatch||parseInt(numMatch[0])>60){addBot("Por favor escribe solo el **número de años**. Ejemplo: **5**");setLoading(false);return;}
+      d.anos_experiencia=String(parseInt(numMatch[0]));setDatos(d);setEtapa("logros");
+      const r=await callClaude(SYS,"Candidato: "+d.nombre+", aplica a "+puesto.nombre+". Tiene "+d.anos_experiencia+" años en "+puesto.area+". Pídele en 2 oraciones sus logros más relevantes relacionados con: "+puesto.requisitos+".");
+      addBot(r);
+    }
+    else if(etapa==="logros"){
+      if(val.trim().length<10){addBot("Por favor describe con más detalle tu experiencia. Mínimo una oración completa.");setLoading(false);return;}
+      d.logros=val;setDatos(d);setEtapa("disponibilidad");addBot("Muy bien. ¿Tienes **disponibilidad inmediata**? ¿En qué turno puedes trabajar?");
+    }
+    else if(etapa==="disponibilidad"){
+      if(val.trim().length<3){addBot("Por favor indica tu disponibilidad. Ejemplo: **Inmediata, turno matutino**");setLoading(false);return;}
+      d.disponibilidad=val;setDatos(d);setEtapa("pretension");addBot("Casi terminamos. ¿Cuál es tu **pretensión salarial mensual neta**? (Solo números, ejemplo: **8500**)");
+    }
+    else if(etapa==="pretension"){
+      const salario=fmtSalario(val);
+      if(!salario){addBot("Por favor escribe solo la cantidad en **números**. Ejemplo: **8500**");setLoading(false);return;}
+      d.pretension=salario;setDatos(d);setEtapa("cv");setEsperandoCV(true);
+    }
+  }
+
+  return e("div",{style:{minHeight:"100vh",display:"flex",flexDirection:"column",background:"#f4f6fb"}},
+    // Header
+    e("div",{style:{background:IND,color:"#fff",padding:"0 20px",height:60,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}},
+      e("div",{style:{display:"flex",alignItems:"center",gap:10}},
+        e("button",{onClick:onBack,style:{background:"none",border:"none",color:"#fff",fontSize:18,opacity:.7,cursor:"pointer"}},"←"),
+        e("div",null,e("div",{style:{fontWeight:600,fontSize:15}},puesto.nombre),e("div",{style:{fontSize:11,opacity:.65}},puesto.area+" · Entrevista IA + Psicometría"))
+      ),
+      e("div",{style:{display:"flex",alignItems:"center",gap:6}},
+        e("div",{className:"pulse",style:{width:8,height:8,borderRadius:"50%",background:"#22c55e"}}),
+        e("span",{style:{fontSize:12,opacity:.75}},"En línea")
+      )
+    ),
+    // Mensajes
+    e("div",{style:{flex:1,overflowY:"auto",padding:"20px 16px",display:"flex",flexDirection:"column",gap:12}},
+      ...msgs.map((m,i)=>m.tipo==="bot"?e(BotBubble,{key:i},e(RenderText,{text:m.texto})):e(UserBubble,{key:i,text:m.texto})),
+      esperandoCV&&e(UploadWidget,{key:"upload",onEnviar:recibirCV}),
+      esperandoPsico&&e(PsicometriaWidget,{key:"psico",onCompletar:recibirPsico,nombre:datos.nombre}),
+      loading&&e("div",{key:"loading",style:{display:"flex",alignItems:"flex-end",gap:8}},
+        e("div",{style:{width:30,height:30,borderRadius:"50%",background:IND,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13}},"🤖"),
+        e("div",{style:{background:"#fff",border:"1px solid #e4e8f0",borderRadius:"18px 18px 18px 4px",padding:"14px 18px",display:"flex",gap:5,alignItems:"center"}},
+          ...[0,1,2].map(i=>e("div",{key:i,className:"pulse",style:{width:7,height:7,borderRadius:"50%",background:CEL,animationDelay:i*0.2+"s"}}))
+        )
+      ),
+
+
+      e("div",{ref:bottomRef})
+    ),
+    // Input bar
+    e("div",{style:{background:"#fff",borderTop:"1px solid #e4e8f0",padding:"14px 16px",display:"flex",gap:10,flexShrink:0}},
+      done
+        ?e("button",{onClick:onBack,className:"bghost",style:{width:"100%"}},"← Volver a vacantes")
+        :(esperandoCV||esperandoPsico)
+          ?e("div",{style:{width:"100%",textAlign:"center",fontSize:13,color:"#bbb",padding:"4px 0"}},esperandoCV?"Adjunta tu CV arriba":"Responde la evaluación psicométrica arriba")
+          :e(React.Fragment,null,
+              e("input",{value:input,onChange:ev=>setInput(ev.target.value),onKeyDown:ev=>ev.key==="Enter"&&!ev.shiftKey&&enviar(),placeholder:"Escribe tu respuesta...",disabled:loading,style:{flex:1,padding:"11px 15px",border:"1.5px solid #e5e7eb",borderRadius:12,fontSize:14,outline:"none",background:loading?"#f9f9f9":"#fff"}}),
+              e("button",{onClick:enviar,disabled:loading||!input.trim(),className:"bpri",style:{padding:"11px 18px"}},"→")
+            )
+    )
+  );
+}
+
+// LOGIN 
+function LoginView({pass,setPass,onLogin,error,onBack}){
+  return e("div",{style:{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}},
+    e("div",{className:"card",style:{width:340,padding:"36px 32px",boxShadow:"0 10px 40px rgba(0,0,0,.1)"}},
+      e("div",{style:{textAlign:"center",marginBottom:24}},
+        e("div",{style:{width:52,height:52,borderRadius:"50%",background:IND,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px",fontSize:22}},"🔐"),
+        e("h2",{style:{fontSize:20,fontWeight:700,color:"#111"}},"Panel Reclutador"),
+        e("p",{style:{color:"#888",fontSize:13,marginTop:4}},"HM Talento Estratégico")
+      ),
+      e("input",{value:pass,onChange:ev=>setPass(ev.target.value),type:"password",placeholder:"Contraseña de acceso",onKeyDown:ev=>ev.key==="Enter"&&onLogin(),style:{width:"100%",padding:"11px 14px",border:"1.5px solid #e5e7eb",borderRadius:10,fontSize:14,marginBottom:error?8:16,outline:"none"}}),
+      error&&e("p",{style:{color:"#ef4444",fontSize:12,marginBottom:14}},error),
+      e("button",{className:"bpri",style:{width:"100%",marginBottom:10},onClick:onLogin},"Ingresar"),
+      e("button",{onClick:onBack,className:"bghost",style:{width:"100%",fontSize:13}},"← Volver")
+    )
+  );
+}
+
+// HOME 
+function HomeView({puestos,onCandidato,onLogin}){
+  return e("div",null,
+    e("div",{style:{background:IND,padding:"0 28px"}},
+      e("div",{style:{maxWidth:1080,margin:"0 auto",height:62,display:"flex",alignItems:"center",justifyContent:"space-between"}},
+        e("div",{style:{display:"flex",alignItems:"center",gap:9,color:"#fff"}},
+          e("div",{style:{width:9,height:9,borderRadius:"50%",background:CEL}}),
+          e("span",{style:{fontSize:19,fontWeight:700}},"HM Talento Estratégico"),
+          e("span",{style:{background:"rgba(0,174,239,.18)",color:CEL,fontSize:10,padding:"2px 8px",borderRadius:20,fontWeight:700}},"BOLSA DE TRABAJO")
+        ),
+        e("button",{onClick:onLogin,style:{background:"rgba(255,255,255,.1)",border:"1px solid rgba(255,255,255,.25)",color:"#fff",padding:"7px 15px",borderRadius:8,fontSize:13,fontWeight:500,cursor:"pointer"}},"🔐 Panel reclutador")
+      )
+    ),
+    e("div",{style:{background:"linear-gradient(135deg,"+IND+" 0%,#0c175c 100%)",color:"#fff",padding:"52px 28px 44px",textAlign:"center"}},
+      e("h1",{style:{fontSize:38,lineHeight:1.2,marginBottom:14,fontWeight:700}},"Tu próxima oportunidad ",e("em",{style:{color:CEL}},"empieza aquí")),
+      e("p",{style:{fontSize:16,opacity:.78,maxWidth:480,margin:"0 auto",lineHeight:1.65}},"Postúlate en minutos. Nuestro asistente con IA evalúa tu perfil y aplica una evaluación psicométrica.")
+    ),
+    e("div",{style:{maxWidth:1080,margin:"0 auto",padding:"44px 28px"}},
+      e("h2",{style:{fontSize:24,fontWeight:700,color:"#111",marginBottom:6}},"Vacantes disponibles"),
+      e("p",{style:{color:"#777",fontSize:14,marginBottom:24}},puestos.length+" posiciones abiertas · Tehuacán, Puebla y región"),
+      e("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:18}},
+        ...puestos.map(p=>{
+          const [bg,fg]=AREA_COLORS[p.area]||["#f3f4f6","#374151"];
+          return e("div",{key:p.id,className:"card",style:{padding:22,cursor:"pointer",transition:"all .2s"},
+            onMouseEnter:ev=>{ev.currentTarget.style.borderColor=CEL;ev.currentTarget.style.transform="translateY(-2px)";ev.currentTarget.style.boxShadow="0 6px 24px rgba(0,174,239,.14)"},
+            onMouseLeave:ev=>{ev.currentTarget.style.borderColor="#e4e8f0";ev.currentTarget.style.transform="none";ev.currentTarget.style.boxShadow="none"},
+            onClick:()=>onCandidato(p)},
+            e("div",{style:{display:"flex",justifyContent:"space-between",marginBottom:10}},e("span",{className:"tag",style:{background:bg,color:fg}},p.area),e("span",{style:{fontSize:11,color:"#aaa"}},"📍 Tehuacán")),
+            e("h3",{style:{fontSize:17,fontWeight:700,color:"#111",marginBottom:8,lineHeight:1.3}},p.nombre),
+            e("p",{style:{fontSize:12,color:"#777",lineHeight:1.55,marginBottom:16}},p.requisitos),
+            e("div",{style:{textAlign:"right"}},e("button",{className:"bcel",style:{fontSize:12,padding:"7px 14px"}},"Postularme →"))
+          );
+        })
+      )
+    )
+  );
+}
+
+// CANDIDATOS TAB 
+function PanelPerfilTab({sel,onEdit}){
+  const [editTel,setEditTel]=useState(false);
+  const [telVal,setTelVal]=useState(sel.telefono||"");
+
+  function formatWA(tel){
+    // Clean phone: keep only digits
+    let t=(tel||"").replace(/\D/g,"");
+    // If starts with 52 already ok, else add Mexico prefix
+    if(!t.startsWith("52"))t="52"+t;
+    const msg=encodeURIComponent("Hola "+sel.nombre+", te contactamos de HM Talento Estrategico respecto a tu postulacion. Quedamos en espera de tu respuesta.");    return "https://web.whatsapp.com/send?phone="+t+"&text="+msg;
+  }
+
+  function guardarTel(){
+    onEdit("telefono",telVal);
+    setEditTel(false);
+  }
+
+  return e("div",{style:{padding:"16px 22px"}},
+    // WhatsApp contact button
+    e("div",{style:{marginBottom:16,background:"linear-gradient(135deg,#25D366,#128C7E)",borderRadius:12,padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}},
+      e("div",{style:{color:"#fff"}},
+        e("div",{style:{fontSize:13,fontWeight:700,marginBottom:2}},"Contactar por WhatsApp"),
+        e("div",{style:{fontSize:11,opacity:.85}},sel.telefono||"Sin número registrado")
+      ),
+      sel.telefono
+        ? e("button",{
+            onClick:()=>{
+              try{(window.top||window).open(formatWA(sel.telefono),"_blank","noopener,noreferrer")}
+              catch(e){window.open(formatWA(sel.telefono),"_blank")}
+            },
+            style:{background:"#fff",color:"#25D366",fontWeight:700,fontSize:13,padding:"8px 16px",borderRadius:8,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:6}},
+            "💬 Abrir WhatsApp"
+          )
+        : e("span",{style:{fontSize:12,color:"rgba(255,255,255,.7)"}},"Agrega un número primero")
+    ),
+
+    // Campos info
+    ...["Email","Experiencia","Disponibilidad","Pretensión"].map((l,i)=>{
+      const keys=["email","anos_experiencia","disponibilidad","pretension"];
+      const v=sel[keys[i]];
+      return e("div",{key:i,style:{marginBottom:12}},
+        e("div",{style:{fontSize:10,fontWeight:700,color:"#aaa",textTransform:"uppercase",letterSpacing:.5,marginBottom:2}},l),
+        e("div",{style:{fontSize:14,color:"#111"}},v||"—")
+      );
+    }),
+
+    // Teléfono editable
+    e("div",{style:{marginBottom:12}},
+      e("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}},
+        e("div",{style:{fontSize:10,fontWeight:700,color:"#aaa",textTransform:"uppercase",letterSpacing:.5}},"Teléfono / WhatsApp"),
+        e("button",{onClick:()=>{setEditTel(!editTel);setTelVal(sel.telefono||"")},
+          style:{fontSize:11,fontWeight:600,border:"none",background:"transparent",color:"#1A2580",cursor:"pointer"}},
+          editTel?"Cancelar":"✏️ Editar")
+      ),
+      editTel
+        ? e("div",{style:{display:"flex",gap:8}},
+            e("input",{value:telVal,onChange:ev=>setTelVal(ev.target.value),
+              placeholder:"Ej: 2381234567",
+              style:{flex:1,padding:"8px 12px",border:"1.5px solid #1A2580",borderRadius:8,fontSize:14,outline:"none"}}),
+            e("button",{onClick:guardarTel,className:"bpri",style:{padding:"8px 14px",fontSize:13}},"Guardar")
+          )
+        : e("div",{style:{fontSize:14,color:"#111"}},sel.telefono||"—")
+    ),
+
+    // Logros
+    sel.logros&&e("div",{style:{marginBottom:12}},
+      e("div",{style:{fontSize:10,fontWeight:700,color:"#aaa",textTransform:"uppercase",letterSpacing:.5,marginBottom:6}},"Logros"),
+      e("div",{style:{fontSize:13,color:"#444",lineHeight:1.6,background:"#f8f9fb",padding:"10px 12px",borderRadius:8}},sel.logros)
+    ),
+
+    // CV
+    sel.cvNombre&&e("div",{style:{background:"#f0f5ff",borderRadius:10,padding:"12px 14px",display:"flex",alignItems:"center",justifyContent:"space-between"}},
+      e("div",{style:{display:"flex",alignItems:"center",gap:8}},
+        e("span",{style:{fontSize:20}},"📎"),
+        e("div",null,e("div",{style:{fontSize:13,fontWeight:600,color:"#1A2580"}},sel.cvNombre),e("div",{style:{fontSize:11,color:"#888"}},"Currículum adjunto"))
+      ),
+      e("button",{onClick:()=>downloadCV(sel),className:"bcel",style:{fontSize:12,padding:"6px 12px"}},"⬇ Descargar")
+    )
+  );
+}
+
+function CandidatosTab(){
+  const [candidatos,setCandidatos]=useState([]);
+  const [filtro,setFiltro]=useState("todos");
+  const [busqueda,setBusqueda]=useState("");
+  const [sel,setSel]=useState(null);
+  const [tabDet,setTabDet]=useState("perfil");
+
+  useEffect(()=>{getCandidatos().then(l=>{setCandidatos(l.sort((a,b)=>b.score-a.score));setCargando(false);}).catch(()=>setCargando(false));},[]);
+
+  function cambiarEstatus(id,est){const u=candidatos.map(c=>c.id===id?{...c,estatus:est}:c);setCandidatos(u);setSel(p=>p?{...p,estatus:est}:null);updateCandidato(id,{estatus:est});}
+  function eliminar(id){const u=candidatos.filter(c=>c.id!==id);setCandidatos(u);setSel(null);deleteCandidato(id);}
+
+  const filtrados=candidatos.filter(c=>{
+    const ok=filtro==="todos"||c.estatus===filtro;
+    const q=busqueda.toLowerCase();
+    return ok&&(!busqueda||(c.nombre||"").toLowerCase().includes(q)||(c.puesto_nombre||"").toLowerCase().includes(q));
+  });
+
+  const stats={
+    total:candidatos.length,
+    pre:candidatos.filter(c=>c.estatus==="Preseleccionado").length,
+    rev:candidatos.filter(c=>c.estatus==="En revisión").length,
+    des:candidatos.filter(c=>c.estatus==="Descartado").length,
+    prom:candidatos.length?Math.round(candidatos.reduce((a,c)=>a+(c.score||0),0)/candidatos.length):0,
+    promPsico:candidatos.filter(c=>c.psicoScores).length?Math.round(candidatos.filter(c=>c.psicoScores).reduce((a,c)=>a+(c.psicoScores.total||0),0)/candidatos.filter(c=>c.psicoScores).length):0,
+  };
+
+  const EC={"Preseleccionado":["#dcfce7","#166534"],"En revisión":["#fef3c7","#92400e"],"Descartado":["#fee2e2","#991b1b"],"Contratado":["#dbeafe","#1e40af"]};
+
+  return e("div",{style:{maxWidth:1200,margin:"0 auto",padding:24}},
+    // Stats
+    e("div",{style:{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:12,marginBottom:24}},
+      ...[
+        {l:"Total",v:stats.total,c:IND},
+        {l:"Preseleccionados",v:stats.pre,c:"#22c55e"},
+        {l:"En revisión",v:stats.rev,c:"#f59e0b"},
+        {l:"Descartados",v:stats.des,c:"#ef4444"},
+        {l:"Score perfil prom.",v:stats.prom+"/100",c:CEL},
+        {l:"Score psico prom.",v:stats.promPsico?stats.promPsico+"/100":"—",c:"#7c3aed"},
+      ].map((s,i)=>e("div",{key:i,className:"card",style:{padding:"14px 16px"}},
+        e("div",{style:{fontSize:22,fontWeight:800,color:s.c}},s.v),
+        e("div",{style:{fontSize:11,color:"#888",marginTop:3}},s.l)
+      ))
+    ),
+    e("div",{style:{display:"grid",gridTemplateColumns:sel?"1fr 400px":"1fr",gap:20}},
+      // Lista
+      e("div",null,
+        e("div",{className:"card",style:{padding:"14px 18px",marginBottom:14,display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}},
+          e("input",{value:busqueda,onChange:ev=>setBusqueda(ev.target.value),placeholder:"🔍 Buscar...",style:{flex:1,minWidth:160,padding:"8px 12px",border:"1.5px solid #e5e7eb",borderRadius:8,fontSize:14,outline:"none"}}),
+          e("button",{onClick:()=>exportCSV(candidatos),className:"bcel",style:{fontSize:12}},"⬇ Exportar"),
+          ...["todos","Preseleccionado","En revisión","Descartado"].map(f=>
+            e("button",{key:f,onClick:()=>setFiltro(f),style:{padding:"8px 12px",borderRadius:8,fontSize:12,fontWeight:600,border:"none",background:filtro===f?IND:"#f3f4f6",color:filtro===f?"#fff":"#555",cursor:"pointer"}},f==="todos"?"Todos":f)
+          )
+        ),
+        e("div",{className:"card",style:{overflow:"hidden"}},
+          filtrados.length===0
+            ?e("div",{style:{padding:40,textAlign:"center",color:"#888"}},candidatos.length===0?"Aún no hay candidatos.":"Sin resultados.")
+            :e("div",null,
+                e("div",{style:{display:"grid",gridTemplateColumns:"2fr 1.3fr 75px 75px 110px 50px 75px",padding:"10px 18px",background:"#f8f9fb",borderBottom:"1px solid #e8eaf0",fontSize:10,fontWeight:700,color:"#999",textTransform:"uppercase",letterSpacing:.4}},
+                  e("span",null,"Candidato"),e("span",null,"Puesto"),e("span",null,"Perfil"),e("span",null,"Psico"),e("span",null,"Estatus"),e("span",null,"CV"),e("span",null,"Fecha")
+                ),
+                ...filtrados.map(c=>{
+                  const [ebg,efg]=EC[c.estatus]||["#f3f4f6","#555"];
+                  const psico=c.psicoScores;
+                  return e("div",{key:c.id,onClick:()=>{setSel(c);setTabDet("perfil")},
+                    style:{display:"grid",gridTemplateColumns:"2fr 1.3fr 75px 75px 110px 50px 75px",padding:"13px 18px",borderBottom:"1px solid #f0f0f5",cursor:"pointer",background:sel&&sel.id===c.id?"#f0f5ff":"transparent"},
+                    onMouseEnter:ev=>{if(!sel||sel.id!==c.id)ev.currentTarget.style.background="#fafafa"},
+                    onMouseLeave:ev=>{if(!sel||sel.id!==c.id)ev.currentTarget.style.background="transparent"}},
+                    e("div",null,e("div",{style:{fontWeight:600,fontSize:14,color:"#111"}},c.nombre||"—"),e("div",{style:{fontSize:12,color:"#888"}},c.email)),
+                    e("div",{style:{fontSize:13,color:"#555",display:"flex",alignItems:"center"}},c.puesto_nombre),
+                    e("div",{style:{display:"flex",alignItems:"center"}},e("div",{style:{width:36,height:36,borderRadius:"50%",background:scoreColor(c.score)+"20",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:800,color:scoreColor(c.score)}},c.score)),
+                    e("div",{style:{display:"flex",alignItems:"center"}},psico?e("div",{style:{width:36,height:36,borderRadius:"50%",background:psicoColor(psico.total)+"20",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:800,color:psicoColor(psico.total)}},psico.total):e("span",{style:{fontSize:12,color:"#ccc"}},"—")),
+                    e("div",{style:{display:"flex",alignItems:"center"}},e("span",{className:"tag",style:{background:ebg,color:efg,fontSize:10}},c.estatus)),
+                    e("div",{style:{display:"flex",alignItems:"center",fontSize:16}},c.cvNombre?"📎":"—"),
+                    e("div",{style:{fontSize:12,color:"#999",display:"flex",alignItems:"center"}},formatDate(c.fecha))
+                  );
+                })
+              )
+        )
+      ),
+      // Detalle
+      sel&&e("div",{className:"card",style:{height:"fit-content",overflow:"hidden",position:"sticky",top:24}},
+        e("div",{style:{background:IND,padding:"18px 22px",color:"#fff"}},
+          e("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}},
+            e("div",null,e("div",{style:{fontSize:16,fontWeight:700}},sel.nombre),e("div",{style:{fontSize:12,opacity:.7,marginTop:2}},sel.puesto_nombre)),
+            e("button",{onClick:()=>setSel(null),style:{background:"none",border:"none",color:"#fff",fontSize:18,opacity:.6,cursor:"pointer"}},"✕")
+          ),
+          e("div",{style:{display:"flex",gap:10}},
+            e("div",{style:{flex:1,background:"rgba(255,255,255,.1)",borderRadius:10,padding:"10px 12px",textAlign:"center"}},
+              e("div",{style:{fontSize:22,fontWeight:800,color:scoreColor(sel.score)}},sel.score),
+              e("div",{style:{fontSize:10,opacity:.7,marginTop:2}},"PERFIL")
+            ),
+            sel.psicoScores&&e("div",{style:{flex:1,background:"rgba(255,255,255,.1)",borderRadius:10,padding:"10px 12px",textAlign:"center"}},
+              e("div",{style:{fontSize:22,fontWeight:800,color:psicoColor(sel.psicoScores.total)}},sel.psicoScores.total),
+              e("div",{style:{fontSize:10,opacity:.7,marginTop:2}},"PSICOMETRÍA")
+            )
+          )
+        ),
+        // Tabs detalle
+        e("div",{style:{display:"flex",borderBottom:"1px solid #f0f0f5"}},
+          ...["perfil","psico","acciones"].map(t=>
+            e("button",{key:t,onClick:()=>setTabDet(t),style:{flex:1,padding:"11px",fontSize:12,fontWeight:600,border:"none",background:"transparent",color:tabDet===t?IND:"#888",borderBottom:tabDet===t?"2px solid "+IND:"2px solid transparent",cursor:"pointer"}},
+              t==="perfil"?"👤 Perfil":t==="psico"?"🧠 Psicometría":"⚙️ Acciones"
+            )
+          )
+        ),
+        // Tab: Perfil
+        tabDet==="perfil"&&e(PanelPerfilTab,{sel,onEdit:(campo,valor)=>{
+          const updated=candidatos.map(c=>c.id===sel.id?{...c,[campo]:valor}:c);
+          setCandidatos(updated);setSel(p=>({...p,[campo]:valor}));saveCandidatos(updated);
+        }}),
+        // Tab: Psicometría
+        tabDet==="psico"&&e("div",{style:{padding:"16px 22px"}},
+          sel.psicoScores
+            ?e("div",null,
+                e("div",{style:{textAlign:"center",marginBottom:16,padding:"14px",background:"#f8f9fb",borderRadius:12}},
+                  e("div",{style:{fontSize:11,color:"#888",marginBottom:4}},"Score psicométrico global"),
+                  e("div",{style:{fontSize:32,fontWeight:800,color:psicoColor(sel.psicoScores.total)}},sel.psicoScores.total,e("span",{style:{fontSize:16}},"/100")),
+                  e("div",{style:{fontSize:13,fontWeight:600,color:psicoColor(sel.psicoScores.total)}},psicoLabel(sel.psicoScores.total))
+                ),
+                ...RASGOS.map(rasgo=>{
+                  const val=sel.psicoScores.rasgos[rasgo.id]||0;
+                  return e("div",{key:rasgo.id,style:{marginBottom:14}},
+                    e("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}},
+                      e("div",{style:{display:"flex",alignItems:"center",gap:6}},
+                        e("span",{style:{fontSize:16}},rasgo.icono),
+                        e("span",{style:{fontSize:12,fontWeight:600,color:rasgo.color}},rasgo.nombre)
+                      ),
+                      e("div",{style:{display:"flex",alignItems:"center",gap:6}},
+                        e("span",{style:{fontSize:14,fontWeight:800,color:psicoColor(val)}},val),
+                        e("span",{style:{fontSize:10,color:"#aaa"}},"/100")
+                      )
+                    ),
+                    e("div",{style:{height:8,background:"#f0f0f5",borderRadius:4,overflow:"hidden"}},
+                      e("div",{style:{height:"100%",width:val+"%",background:rasgo.color,borderRadius:4,transition:"width .5s"}})
+                    ),
+                    e("div",{style:{fontSize:10,color:psicoColor(val),fontWeight:600,marginTop:3}},psicoLabel(val))
+                  );
+                })
+              )
+            :e("div",{style:{padding:24,textAlign:"center",color:"#888"}},"Este candidato no completó la evaluación psicométrica.")
+        ),
+        // Tab: Acciones
+        tabDet==="acciones"&&e("div",{style:{padding:"16px 22px"}},
+          e("div",{style:{fontSize:11,fontWeight:700,color:"#888",marginBottom:8}},"CAMBIAR ESTATUS"),
+          e("div",{style:{display:"flex",gap:6,flexWrap:"wrap",marginBottom:16}},
+            ...["Preseleccionado","En revisión","Descartado","Contratado"].map(est=>
+              e("button",{key:est,onClick:()=>cambiarEstatus(sel.id,est),style:{padding:"8px 12px",borderRadius:8,fontSize:12,fontWeight:700,border:"none",background:sel.estatus===est?IND:"#f3f4f6",color:sel.estatus===est?"#fff":"#555",cursor:"pointer"}},est)
+            )
+          ),
+          e("div",{style:{fontSize:11,color:"#aaa",marginBottom:16,padding:"10px 12px",background:"#fafafa",borderRadius:8,lineHeight:1.5}},"⚡ El estatus se calcula automáticamente según score de perfil y psicometría. Puedes ajustarlo manualmente aquí."),
+          e("button",{onClick:()=>eliminar(sel.id),style:{width:"100%",padding:"10px",borderRadius:8,fontSize:13,border:"1.5px solid #fee2e2",background:"transparent",color:"#ef4444",fontWeight:600,cursor:"pointer"}},"🗑 Eliminar candidato")
+        )
+      )
+    )
+  );
+}
+
+// VACANTES TAB 
+function VacantesTab({onPuestosChange}){
+  const [puestos,setPuestos]=useState(getPuestos);
+  const [editando,setEditando]=useState(null);
+  const [form,setForm]=useState({});
+  const [nuevo,setNuevo]=useState(false);
+  const AREAS=["Producción","Recursos Humanos","Ventas","Administración","Logística","TI","Dirección"];
+
+  function guardar(){
+    const lista=nuevo?[...puestos,{...form,id:"p_"+Date.now(),activo:true}]:puestos.map(p=>p.id===editando?{...p,...form}:p);
+    savePuestos(lista);setPuestos(lista);setEditando(null);setNuevo(false);onPuestosChange();
+  }
+  function toggleActivo(id){const lista=puestos.map(p=>p.id===id?{...p,activo:!p.activo}:p);savePuestos(lista);setPuestos(lista);onPuestosChange();}
+  function eliminar(id){if(!confirm("¿Eliminar?"))return;const lista=puestos.filter(p=>p.id!==id);savePuestos(lista);setPuestos(lista);onPuestosChange();}
+
+  return e("div",{style:{maxWidth:1000,margin:"0 auto",padding:24}},
+    e("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}},
+      e("div",null,e("h2",{style:{fontSize:20,fontWeight:700}},"Gestión de Vacantes"),e("p",{style:{fontSize:13,color:"#888",marginTop:2}},puestos.filter(p=>p.activo).length+" activas · "+puestos.filter(p=>!p.activo).length+" inactivas")),
+      e("button",{onClick:()=>{setForm({nombre:"",area:"Producción",requisitos:""});setNuevo(true);setEditando(null)},className:"bpri"},"+ Nueva vacante")
+    ),
+    (editando||nuevo)&&e("div",{style:{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}},
+      e("div",{className:"card",style:{width:520,padding:"28px 32px",boxShadow:"0 20px 60px rgba(0,0,0,.2)"}},
+        e("h3",{style:{fontSize:18,fontWeight:700,marginBottom:20}},nuevo?"Nueva vacante":"Editar vacante"),
+        e("div",{style:{marginBottom:14}},e("label",{style:{fontSize:12,fontWeight:700,color:"#888",textTransform:"uppercase",display:"block",marginBottom:6}},"Nombre del puesto"),e("input",{value:form.nombre||"",onChange:ev=>setForm(f=>({...f,nombre:ev.target.value})),style:{width:"100%",padding:"10px 14px",border:"1.5px solid #e5e7eb",borderRadius:10,fontSize:14,outline:"none"}})),
+        e("div",{style:{marginBottom:14}},e("label",{style:{fontSize:12,fontWeight:700,color:"#888",textTransform:"uppercase",display:"block",marginBottom:6}},"Área"),e("select",{value:form.area||"Producción",onChange:ev=>setForm(f=>({...f,area:ev.target.value})),style:{width:"100%",padding:"10px 14px",border:"1.5px solid #e5e7eb",borderRadius:10,fontSize:14,outline:"none",background:"#fff"}},...AREAS.map(a=>e("option",{key:a},a)))),
+        e("div",{style:{marginBottom:20}},e("label",{style:{fontSize:12,fontWeight:700,color:"#888",textTransform:"uppercase",display:"block",marginBottom:6}},"Requisitos"),e("textarea",{value:form.requisitos||"",onChange:ev=>setForm(f=>({...f,requisitos:ev.target.value})),rows:3,style:{width:"100%",padding:"10px 14px",border:"1.5px solid #e5e7eb",borderRadius:10,fontSize:14,outline:"none",resize:"vertical"}})),
+        e("div",{style:{display:"flex",gap:10}},
+          e("button",{onClick:guardar,className:"bpri",style:{flex:1},disabled:!form.nombre||!form.requisitos},"Guardar"),
+          e("button",{onClick:()=>{setEditando(null);setNuevo(false)},className:"bghost",style:{flex:1}},"Cancelar")
+        )
+      )
+    ),
+    e("div",{style:{display:"flex",flexDirection:"column",gap:12}},
+      ...puestos.map(p=>{
+        const [bg,fg]=AREA_COLORS[p.area]||["#f3f4f6","#555"];
+        return e("div",{key:p.id,className:"card",style:{padding:"18px 22px",opacity:p.activo?1:.55}},
+          e("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}},
+            e("div",{style:{flex:1}},
+              e("div",{style:{display:"flex",alignItems:"center",gap:10,marginBottom:6}},e("span",{className:"tag",style:{background:bg,color:fg}},p.area),e("span",{style:{fontSize:12,fontWeight:600,color:p.activo?"#22c55e":"#aaa"}},p.activo?"● Activa":"○ Inactiva")),
+              e("h3",{style:{fontSize:16,fontWeight:700,marginBottom:4}},p.nombre),
+              e("p",{style:{fontSize:12,color:"#777",lineHeight:1.5}},p.requisitos)
+            ),
+            e("div",{style:{display:"flex",gap:8,flexShrink:0}},
+              e("button",{onClick:()=>{setForm({nombre:p.nombre,area:p.area,requisitos:p.requisitos});setEditando(p.id);setNuevo(false)},style:{padding:"8px 14px",borderRadius:8,fontSize:12,fontWeight:600,border:"1.5px solid "+IND,background:"transparent",color:IND,cursor:"pointer"}},"✏️ Editar"),
+              e("button",{onClick:()=>toggleActivo(p.id),style:{padding:"8px 12px",borderRadius:8,fontSize:12,fontWeight:600,border:"1.5px solid #e5e7eb",background:p.activo?"#fff7ed":"#f0fff4",color:p.activo?"#f59e0b":"#22c55e",cursor:"pointer"}},p.activo?"Desactivar":"Activar"),
+              e("button",{onClick:()=>eliminar(p.id),style:{padding:"8px 12px",borderRadius:8,fontSize:12,border:"1.5px solid #fee2e2",background:"transparent",color:"#ef4444",cursor:"pointer"}},"🗑")
+            )
+          )
+        );
+      })
+    )
+  );
+}
+
+// PANEL VIEW 
+function PanelView({onBack,onPuestosChange}){
+  const [tab,setTab]=useState("candidatos");
+  return e("div",{style:{minHeight:"100vh",background:"#f4f6fb"}},
+    e("div",{style:{background:IND,color:"#fff",padding:"0 24px",height:64,display:"flex",alignItems:"center",justifyContent:"space-between"}},
+      e("div",{style:{display:"flex",alignItems:"center",gap:12}},
+        e("button",{onClick:onBack,style:{background:"none",border:"none",color:"#fff",fontSize:18,opacity:.7,cursor:"pointer"}},"←"),
+        e("span",{style:{fontSize:20,fontWeight:700}},"Panel de Reclutamiento")
+      ),
+      e("div",{style:{display:"flex",gap:8}},
+        e("button",{onClick:()=>setTab("candidatos"),className:"tab-btn",style:{background:tab==="candidatos"?CEL:"rgba(255,255,255,.15)",color:"#fff"}},"👥 Candidatos"),
+        e("button",{onClick:()=>setTab("vacantes"),className:"tab-btn",style:{background:tab==="vacantes"?CEL:"rgba(255,255,255,.15)",color:"#fff"}},"📋 Vacantes")
+      )
+    ),
+    tab==="candidatos"&&e(CandidatosTab,null),
+    tab==="vacantes"&&e(VacantesTab,{onPuestosChange})
+  );
+}
+
+// APP 
+function App(){
+  const [vista,setVista]=useState("home");
+  const [puesto,setPuesto]=useState(null);
+  const [loginPass,setLoginPass]=useState("");
+  const [loginError,setLoginError]=useState("");
+  const [puestos,setPuestosState]=useState(()=>getPuestos().filter(p=>p.activo));
+  const [showCsv,setShowCsv]=useState(false);
+  const [cvCand,setCvCand]=useState(null);
+  useEffect(()=>{
+    const onCsv=()=>setShowCsv(true);
+    window._csvModalShow=onCsv;
+    window.addEventListener("hm_show_csv",onCsv);
+    // CV: store candidate directly in state (no event timing issues)
+    window._cvShowFn=(c)=>{setCvCand(c);};
+    return()=>{
+      window.removeEventListener("hm_show_csv",onCsv);
+    };
+  },[]);
+  function recargar(){setPuestosState(getPuestos().filter(p=>p.activo))}
+  return e("div",{style:{fontFamily:"'Segoe UI',sans-serif",minHeight:"100vh",background:"#f4f6fb"}},
+    vista==="home"&&e(HomeView,{puestos,onCandidato:p=>{setPuesto(p);setVista("chat")},onLogin:()=>{setLoginError("");setVista("login")}}),
+    vista==="login"&&e(LoginView,{pass:loginPass,setPass:setLoginPass,onLogin:()=>{if(loginPass==="HMtalento2024"){setLoginError("");setVista("panel")}else setLoginError("Contraseña incorrecta.")},error:loginError,onBack:()=>setVista("home")}),
+    vista==="chat"&&e(ChatView,{puesto,onBack:()=>setVista("home")}),
+    vista==="panel"&&e(PanelView,{onBack:()=>setVista("home"),onPuestosChange:recargar}),
+    showCsv&&e(CsvModal,{onClose:()=>setShowCsv(false)}),
+    cvCand&&e(CvModal,{cand:cvCand,onClose:()=>setCvCand(null)})
+  );
+}
+
+// ── MODALES DE DESCARGA ───────────────────────────────────────────
+function CsvModal({onClose}){
+  const [csv,setCsv]=useState("");
+  const [copiado,setCopiado]=useState(false);
+  useEffect(()=>{
+    setCsv(window._csvData||"");
+    const handler=()=>setCsv(window._csvData||"");
+    window.addEventListener("hm_show_csv",handler);
+    return()=>window.removeEventListener("hm_show_csv",handler);
+  },[]);
+  function copiar(){
+    navigator.clipboard.writeText(csv).then(()=>{setCopiado(true);setTimeout(()=>setCopiado(false),2500);}).catch(()=>{
+      const ta=document.createElement("textarea");ta.value=csv;document.body.appendChild(ta);ta.select();document.execCommand("copy");document.body.removeChild(ta);setCopiado(true);setTimeout(()=>setCopiado(false),2500);
+    });
+  }
+  if(!csv)return null;
+  const filas=csv.split("\r\n").length-1;
+  return e("div",{style:{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999}},
+    e("div",{className:"card",style:{width:"min(680px,95vw)",maxHeight:"85vh",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}},
+      e("div",{style:{background:IND,padding:"18px 22px",color:"#fff",display:"flex",justifyContent:"space-between",alignItems:"center"}},
+        e("div",null,
+          e("div",{style:{fontSize:16,fontWeight:700}},"Exportar candidatos"),
+          e("div",{style:{fontSize:12,opacity:.75,marginTop:2}},filas+" candidatos · Listo para pegar en Excel")
+        ),
+        e("button",{onClick:onClose,style:{background:"none",border:"none",color:"#fff",fontSize:20,cursor:"pointer"}},"✕")
+      ),
+      e("div",{style:{padding:"20px 22px",flex:1,overflowY:"auto"}},
+        e("div",{style:{background:"#f0fff4",border:"1.5px solid #86efac",borderRadius:10,padding:"12px 16px",marginBottom:16,fontSize:13,color:"#166534",lineHeight:1.6}},
+          "✅ ",e("strong",null,"Instrucciones:"),
+          " Haz clic en ",e("strong",null,"Copiar datos"),", abre Excel, selecciona la celda A1 y presiona ",e("strong",null,"Cmd+V")," (Mac) o ",e("strong",null,"Ctrl+V")," (Windows) — los datos quedarán separados en columnas automáticamente."
+        ),
+        e("textarea",{
+          readOnly:true,
+          value:csv,
+          style:{width:"100%",height:200,fontFamily:"monospace",fontSize:11,border:"1.5px solid #e5e7eb",borderRadius:8,padding:"10px",resize:"vertical",outline:"none",background:"#fafafa"}
+        })
+      ),
+      e("div",{style:{padding:"14px 22px",borderTop:"1px solid #f0f0f5",display:"flex",gap:10}},
+        e("button",{onClick:copiar,className:"bpri",style:{flex:1,fontSize:14}},
+          copiado?"✅ ¡Copiado! Pega en Excel":"📋 Copiar datos para Excel"
+        ),
+        e("button",{onClick:onClose,className:"bghost",style:{fontSize:13}},"Cerrar")
+      )
+    )
+  );
+}
+
+function CvModal({onClose}){
+  const [cand,setCand]=useState(null);
+  const [blobUrl,setBlobUrl]=useState(null);
+  const [abriendo,setAbriendo]=useState(false);
+
+  useEffect(()=>{
+    function loadCv(){
+      const c=window._cvCandidate||null;
+      setCand(c);
+      if(c&&c.cvData){
+        try{
+          const parts=c.cvData.split(",");
+          const mime=parts[0].match(/:(.*?);/)[1];
+          const bin=atob(parts[1]);
+          const buf=new Uint8Array(bin.length);
+          for(let j=0;j<bin.length;j++) buf[j]=bin.charCodeAt(j);
+          const url=URL.createObjectURL(new Blob([buf],{type:mime}));
+          setBlobUrl(url);
+        }catch(err){console.warn("blob err:",err);setBlobUrl(null);}
+      }
+    }
+    loadCv();
+    window.addEventListener("hm_show_cv",loadCv);
+    return()=>{window.removeEventListener("hm_show_cv",loadCv);};
+  },[]);
+
+  function handleClose(){if(blobUrl)URL.revokeObjectURL(blobUrl);setBlobUrl(null);setCand(null);onClose();}
+
+  function handleDescargar(){
+    if(!blobUrl||!cand)return;
+    const a=document.createElement("a");
+    a.href=blobUrl;a.download=cand.cvNombre;
+    document.body.appendChild(a);a.click();
+    setTimeout(()=>document.body.removeChild(a),100);
+  }
+
+  function handleVerPDF(){
+    if(!blobUrl)return;
+    setAbriendo(true);
+    window.open(blobUrl,"_blank");
+    setTimeout(()=>setAbriendo(false),1500);
+  }
+
+  if(!cand||!cand.cvData)return null;
+  const esPDF=cand.cvData.includes("application/pdf");
+
+  return e("div",{style:{position:"fixed",inset:0,background:"rgba(0,0,0,.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999}},
+    e("div",{className:"card",style:{width:"min(500px,94vw)",overflow:"hidden",boxShadow:"0 20px 60px rgba(0,0,0,.4)"}},
+      e("div",{style:{background:IND,padding:"18px 22px",color:"#fff",display:"flex",justifyContent:"space-between",alignItems:"center"}},
+        e("div",{style:{display:"flex",alignItems:"center",gap:10}},
+          e("span",{style:{fontSize:22}},"📎"),
+          e("div",null,
+            e("div",{style:{fontWeight:700,fontSize:15}},cand.cvNombre),
+            e("div",{style:{fontSize:11,opacity:.75,marginTop:2}},cand.nombre+" · "+cand.puesto_nombre)
+          )
+        ),
+        e("button",{onClick:handleClose,style:{background:"none",border:"none",color:"#fff",fontSize:22,cursor:"pointer",lineHeight:1,opacity:.8}},"✕")
+      ),
+      e("div",{style:{padding:"28px 24px",textAlign:"center",background:"#f8f9fb"}},
+        e("div",{style:{fontSize:52,marginBottom:16}},esPDF?"📄":"📝"),
+        e("div",{style:{fontSize:15,fontWeight:600,color:"#333",marginBottom:8}},cand.cvNombre),
+        e("div",{style:{fontSize:13,color:"#888",marginBottom:24}},esPDF?"Documento PDF":"Documento Word"),
+        e("div",{style:{display:"flex",gap:12,justifyContent:"center",flexWrap:"wrap"}},
+          esPDF&&blobUrl&&e("button",{
+            onClick:handleVerPDF,
+            className:"bpri",
+            style:{padding:"11px 22px",fontSize:14,display:"flex",alignItems:"center",gap:8}
+          },abriendo?"Abriendo...":"👁 Ver PDF"),
+          blobUrl&&e("button",{
+            onClick:handleDescargar,
+            style:{padding:"11px 22px",fontSize:14,fontWeight:600,background:CEL,color:"#fff",border:"none",borderRadius:10,cursor:"pointer",display:"flex",alignItems:"center",gap:8}
+          },"⬇ Descargar")
+        ),
+        !blobUrl&&e("div",{style:{color:"#aaa",fontSize:13,marginTop:8}},"Preparando archivo...")
+      )
+    )
+  );
+}
+
+
+window.addEventListener("load",()=>{
+  document.getElementById("loading-screen").style.display="none";
+  ReactDOM.createRoot(document.getElementById("root")).render(e(App,null));
+});
+</script>
+</body>
+</html>
